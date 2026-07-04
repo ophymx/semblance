@@ -193,3 +193,44 @@ func Union(dst, a, b Signature) {
 		dst[i] = min(a[i], b[i])
 	}
 }
+
+// Cardinality estimates the number of distinct elements sketched into
+// sig. Each slot holds the minimum of n permuted uniform values, so the
+// slot values themselves carry a cardinality estimate: k/Σ(vᵢ/2⁶⁴) − 1.
+// Standard error is about n/sqrt(k). The empty-set signature estimates 0.
+// Panics if sig is empty (zero-length).
+func Cardinality(sig Signature) float64 {
+	if len(sig) == 0 {
+		panic("minhash: empty signature")
+	}
+	sum := 0.0
+	for _, v := range sig {
+		sum += float64(v) / (1 << 64)
+	}
+	return float64(len(sig))/sum - 1
+}
+
+// Containment estimates the fraction of a's elements that are also in b —
+// the asymmetric measure c(A,B) = |A∩B| / |A| (Broder's containment).
+// Unlike [Jaccard] it is meaningful when the sets differ greatly in size:
+// a short document fully quoted inside a long one has low Jaccard but
+// containment near 1.
+//
+// The estimate combines the Jaccard estimate with [Cardinality] estimates
+// of both sets (|A∩B| = J/(1+J)·(|A|+|B|)), so its error compounds those
+// estimators' and — the important caveat — grows with the size ratio:
+// absolute error is roughly sqrt(R·c/k) with R = (|A|+|B|)/|A|. Containment
+// of a small set in a much larger one is therefore noisy at default k
+// (R=9, k=128: ±0.26 at one standard error); increase k when that case
+// must be measured precisely, or treat the result as a coarse signal.
+// Returns 0 when a estimates as empty; the result is clamped to [0, 1].
+// Panics as [Jaccard] does on length mismatch or empty signatures.
+func Containment(a, b Signature) float64 {
+	j := Jaccard(a, b)
+	na, nb := Cardinality(a), Cardinality(b)
+	if na <= 0 {
+		return 0
+	}
+	c := j * (na + nb) / ((1 + j) * na)
+	return min(max(c, 0), 1)
+}

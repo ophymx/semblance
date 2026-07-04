@@ -136,3 +136,25 @@ func TestSketchBytesMatchesSketch(t *testing.T) {
 		t.Error("SketchIntoBytes and Sketch disagree")
 	}
 }
+
+func TestContainment(t *testing.T) {
+	parent := "the quick brown fox jumps over the lazy dog while the cat watches from the fence and the birds sing in the trees above the garden wall"
+	reply := parent + " that is a lovely observation about animals and I agree completely with everything said"
+
+	// Most of the parent is inside the reply; the reverse is weaker.
+	if got := semblance.Containment(parent, reply); got < 0.8 {
+		t.Errorf("Containment(parent, reply) = %v, want > 0.8", got)
+	}
+	forward := semblance.Containment(parent, reply)
+	backward := semblance.Containment(reply, parent)
+	if backward >= forward {
+		t.Errorf("asymmetry lost: c(reply,parent)=%v >= c(parent,reply)=%v", backward, forward)
+	}
+	// Degenerate inputs follow the Similarity rule.
+	if got := semblance.Containment("hi", reply); got != 0 {
+		t.Errorf("Containment(degenerate, x) = %v, want 0", got)
+	}
+	if got := semblance.Containment(parent, "hi"); got != 0 {
+		t.Errorf("Containment(x, degenerate) = %v, want 0", got)
+	}
+}

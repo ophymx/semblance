@@ -130,6 +130,19 @@ func (s *Sketcher) Similarity(a, b string) float64 {
 	return minhash.Jaccard(sa, sb)
 }
 
+// Containment estimates the fraction of a's word shingles also present
+// in b — the asymmetric counterpart of [Sketcher.Similarity], in [0, 1].
+// A short text fully quoted inside a long one has low similarity but
+// containment near 1, which is the right question for quote and
+// boilerplate detection. Returns 0 if either text has no shingles.
+func (s *Sketcher) Containment(a, b string) float64 {
+	sa, sb := s.Sketch(a), s.Sketch(b)
+	if isEmptySet(sa) || isEmptySet(sb) {
+		return 0
+	}
+	return minhash.Containment(sa, sb)
+}
+
 // NewIndex returns an empty LSH candidate index shaped by the
 // configuration's Bands and Rows, for signatures produced by this Sketcher.
 // Panics if Bands/Rows were left zero.
@@ -146,6 +159,14 @@ func (s *Sketcher) NewIndex() *lsh.Index {
 // too short to shingle (fewer than 3 words).
 func Similarity(a, b string) float64 {
 	return defaultSketcher.Similarity(a, b)
+}
+
+// Containment estimates the fraction of a's word shingles also present in
+// b with the [Defaults] configuration — the asymmetric measure for quote
+// and boilerplate detection ("how much of a is inside b"). Returns 0 if
+// either text is too short to shingle.
+func Containment(a, b string) float64 {
+	return defaultSketcher.Containment(a, b)
 }
 
 var defaultSketcher = NewSketcher(Defaults())
