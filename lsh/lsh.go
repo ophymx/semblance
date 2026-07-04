@@ -40,6 +40,26 @@ type bucketStore interface {
 	add(band int, key uint64, id string)
 	get(band int, key uint64) []string
 	remove(band int, key uint64, id string)
+	stats() (buckets, entries, maxBucket int)
+}
+
+// Stats describes the occupancy of an index. Retrieve with [Index.Stats]
+// or [HammingIndex.Stats].
+type Stats struct {
+	// IDs is the number of distinct ids indexed (same as Len).
+	IDs int
+	// Buckets is the number of non-empty buckets across all bands (or
+	// blocks, for a HammingIndex).
+	Buckets int
+	// Entries is the total number of bucket entries; each Add contributes
+	// bands entries to an Index and maxDist+1 to a HammingIndex.
+	Entries int
+	// MaxBucket is the size of the largest bucket — the hot-bucket
+	// signal. For an Index it bounds the candidates a single band can
+	// contribute to one query; a value far above Entries/Buckets means
+	// many near-identical sketches share a bucket, and queries landing
+	// there will return large candidate lists.
+	MaxBucket int
 }
 
 type memStore []map[uint64][]string
@@ -52,6 +72,17 @@ func (s memStore) add(band int, key uint64, id string) {
 }
 
 func (s memStore) get(band int, key uint64) []string { return s[band][key] }
+
+func (s memStore) stats() (buckets, entries, maxBucket int) {
+	for _, band := range s {
+		for _, bucket := range band {
+			buckets++
+			entries += len(bucket)
+			maxBucket = max(maxBucket, len(bucket))
+		}
+	}
+	return buckets, entries, maxBucket
+}
 
 // remove deletes every occurrence of id in the bucket.
 func (s memStore) remove(band int, key uint64, id string) {
@@ -120,6 +151,14 @@ func (ix *Index) Remove(id string) bool {
 
 // Len returns the number of distinct ids currently indexed.
 func (ix *Index) Len() int { return len(ix.keys) }
+
+// Stats reports bucket occupancy, for tuning bands/rows and spotting hot
+// buckets. Costs a full walk of the buckets — for monitoring cadence, not
+// per-operation use.
+func (ix *Index) Stats() Stats {
+	buckets, entries, maxBucket := ix.store.stats()
+	return Stats{IDs: len(ix.keys), Buckets: buckets, Entries: entries, MaxBucket: maxBucket}
+}
 
 // Range returns an iterator over the distinct ids in the index, in
 // unspecified order. The index must not be modified during iteration. The

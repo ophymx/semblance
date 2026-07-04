@@ -107,6 +107,20 @@ func (ix *HammingIndex) Remove(id string) bool {
 // Len returns the number of distinct ids currently indexed.
 func (ix *HammingIndex) Len() int { return len(ix.fps) }
 
+// Stats reports block-table occupancy; see [Stats]. Costs a full walk of
+// the tables — for monitoring cadence, not per-operation use.
+func (ix *HammingIndex) Stats() Stats {
+	st := Stats{IDs: len(ix.fps)}
+	for i := range ix.blocks {
+		for _, bucket := range ix.blocks[i].table {
+			st.Buckets++
+			st.Entries += len(bucket)
+			st.MaxBucket = max(st.MaxBucket, len(bucket))
+		}
+	}
+	return st
+}
+
 // Range returns an iterator over the (id, fingerprint) pairs in the index
 // — ids added multiple times yield once per Add — in unspecified order.
 // The index must not be modified during iteration. Unlike [Index], the
