@@ -169,3 +169,46 @@ dependencies; default `GOAMD64=v1` builds use the CSA kernel), NEON is
 unconditional on arm64. Both kernels are verified against a naive oracle
 across tail lengths and saturation patterns (`TestPospopcnt`), and produce
 bit-identical fingerprints (golden tests).
+
+## Prototype results, round 2 (targets 2, 3, 4)
+
+**Target 2 (MinHash permutation loop, AVX2).** `sketchBlockAVX2` runs four
+permutations per YMM register, permutation-block-major (a/b/minima in
+registers for the whole 256-element block), with the synthesized 64-bit
+multiply (3× vpmuludq) and sign-biased unsigned min, two accumulators to
+halve the compare/blend chain. Kernel: 87.8→36.9 µs per block at k=128
+(**2.4×** — the 2–3× prediction held here). End-to-end 100 KB: Char
+34.8→19.7 ms (**1.77×**), Words 8.4→6.5 ms (1.28×, tokenizer-bound).
+NEON verdict confirmed empirically without writing it: the M1 Pro runs the
+*scalar* kernel at 13.4 µs/block — 2.75× faster than this box's AVX2 — so
+a NEON MinHash kernel is not worth pursuing.
+
+**Target 4 (tokenizer, pure Go — no SIMD needed yet).** All-lowercase-ASCII
+tokens (the common case) now hash directly from the string, zero-copy; only
+tokens with uppercase or non-ASCII runes take the fold buffer. Identical
+hashes by construction (golden + fuzz verified). `SketchText` 5.7→4.1 ms
+(**1.38×**); on the M1, 605→405 µs (**1.49×**). The CSA lesson repeated:
+measure the scalar rewrite before reaching for vpcmpgtb.
+
+**Target 3 (Jaccard equality count, AVX2).** `eqCountAVX2`: vpcmpeqq with
+vector-accumulated mask subtraction. `Jaccard` at k=128: 282→100 ns
+(**2.8×**). M1 scalar: 53 ns (again faster than our vectorized amd64).
+
+**Cumulative on the dev box, 100 KB docs, since the pre-prototype
+baseline** (GOAMD64=v3 builds; v1 builds keep the pure-Go wins only):
+
+| Pipeline | baseline | now (v3) | speedup |
+|---|---|---|---|
+| simhash SketchText | 15.3 ms | 4.1 ms | **3.8×** |
+| minhash Words | 9.5 ms | 5.2 ms | **1.8×** |
+| minhash Char | ~42 ms | 20.2 ms | **~2.1×** |
+| Jaccard (k=128) | 282 ns | 100 ns | **2.8×** |
+
+Standing conclusions: (1) algorithmic reformulation and scalar fast paths
+beat assembly twice (CSA, tokenizer) — always prototype pure Go first;
+(2) AVX2 pays only where 64-bit arithmetic is unavoidable and dominant
+(the MinHash loop, equality counting); (3) Apple-class arm64 scalar
+pipelines outrun our AVX2 synthesis — NEON investment remains unjustified
+everywhere except the already-written pospopcnt kernel; (4) all kernels
+remain bit-identical to scalar, enforced by oracle tests and cross-platform
+golden runs on the M1.

@@ -114,13 +114,20 @@ func Jaccard(a, b Signature) float64 {
 	if len(a) == 0 {
 		panic("minhash: empty signature")
 	}
+	return float64(eqCount(a, b)) / float64(len(a))
+}
+
+// eqCountGeneric counts positions where a and b match; the portable kernel
+// behind [Jaccard].
+func eqCountGeneric(a, b []uint64) int {
+	b = b[:len(a)]
 	eq := 0
 	for i := range a {
 		if a[i] == b[i] {
 			eq++
 		}
 	}
-	return float64(eq) / float64(len(a))
+	return eq
 }
 
 // Union writes into dst the signature of the union of the sets a and b were

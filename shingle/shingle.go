@@ -110,10 +110,15 @@ func Words(text string, w int) iter.Seq[uint64] {
 // tokenHashes scans text for tokens (maximal runs of letters/numbers),
 // lowercases them, and calls emit with the xxhash of each token's lowercased
 // UTF-8 bytes. Stops early if emit returns false.
+//
+// Tokens that are entirely lowercase ASCII alphanumerics — the common case
+// in real text — are hashed directly from the string with no copying; only
+// tokens containing uppercase or non-ASCII runes go through the fold
+// buffer. Both paths hash identical byte sequences.
 func tokenHashes(text string, emit func(uint64) bool) {
 	buf := make([]byte, 0, 64) // reused lowercased-token buffer
-	inToken := false
 	for i := 0; i < len(text); {
+		// Find the token start.
 		var r rune
 		var size int
 		if c := text[i]; c < utf8.RuneSelf {
@@ -121,21 +126,65 @@ func tokenHashes(text string, emit func(uint64) bool) {
 		} else {
 			r, size = utf8.DecodeRuneInString(text[i:])
 		}
-		if isTokenRune(r) {
-			inToken = true
-			buf = appendLowerRune(buf, r)
-		} else if inToken {
-			inToken = false
-			if !emit(xxhash.Sum64(buf)) {
-				return
-			}
-			buf = buf[:0]
+		if !isTokenRune(r) {
+			i += size
+			continue
 		}
-		i += size
+
+		// Fast path: consume a lowercase-ASCII alphanumeric run.
+		start := i
+		for i < len(text) && isLowerASCIIToken(text[i]) {
+			i++
+		}
+
+		// Decide what stopped the run.
+		if i >= len(text) {
+			emit(xxhash.Sum64String(text[start:i]))
+			return
+		}
+		if c := text[i]; c < utf8.RuneSelf {
+			if !isTokenRune(rune(c)) { // ASCII boundary: token was all-fast
+				if !emit(xxhash.Sum64String(text[start:i])) {
+					return
+				}
+				i++
+				continue
+			}
+		} else {
+			r, size = utf8.DecodeRuneInString(text[i:])
+			if !isTokenRune(r) { // non-token rune boundary
+				if !emit(xxhash.Sum64String(text[start:i])) {
+					return
+				}
+				i += size
+				continue
+			}
+		}
+
+		// Slow path: the token continues with an uppercase or non-ASCII
+		// rune. Carry over the already-consumed prefix (it is lowercase
+		// ASCII, so it folds to itself) and finish rune-by-rune.
+		buf = append(buf[:0], text[start:i]...)
+		for i < len(text) {
+			if c := text[i]; c < utf8.RuneSelf {
+				r, size = rune(c), 1
+			} else {
+				r, size = utf8.DecodeRuneInString(text[i:])
+			}
+			if !isTokenRune(r) {
+				break
+			}
+			buf = appendLowerRune(buf, r)
+			i += size
+		}
+		if !emit(xxhash.Sum64(buf)) {
+			return
+		}
 	}
-	if inToken {
-		emit(xxhash.Sum64(buf))
-	}
+}
+
+func isLowerASCIIToken(c byte) bool {
+	return 'a' <= c && c <= 'z' || '0' <= c && c <= '9'
 }
 
 func isTokenRune(r rune) bool {
