@@ -3,10 +3,13 @@
 // for MinHash signatures and a Hamming-ball index for SimHash fingerprints.
 //
 // Neither index is safe for concurrent use; guard with a lock if you share
-// one across goroutines. Both return results in deterministic order.
+// one across goroutines. Query results are returned in deterministic
+// order; Range enumeration order is unspecified.
 package lsh
 
 import (
+	"iter"
+	"maps"
 	"math"
 
 	"github.com/ophymx/semblance/internal/hashutil"
@@ -25,6 +28,10 @@ import (
 type Index struct {
 	bands, rows int
 	store       bucketStore
+	// keys records, per id, the bucket key of every band of every Add, in
+	// band order — what Remove needs to find the id's entries. Costs
+	// bands×8 bytes per Add plus map overhead.
+	keys map[string][]uint64
 }
 
 // bucketStore is the bucket backend. Unexported so a KV-backed store can be
@@ -32,6 +39,7 @@ type Index struct {
 type bucketStore interface {
 	add(band int, key uint64, id string)
 	get(band int, key uint64) []string
+	remove(band int, key uint64, id string)
 }
 
 type memStore []map[uint64][]string
@@ -45,13 +53,34 @@ func (s memStore) add(band int, key uint64, id string) {
 
 func (s memStore) get(band int, key uint64) []string { return s[band][key] }
 
+// remove deletes every occurrence of id in the bucket.
+func (s memStore) remove(band int, key uint64, id string) {
+	bucket := s[band][key]
+	kept := bucket[:0]
+	for _, v := range bucket {
+		if v != id {
+			kept = append(kept, v)
+		}
+	}
+	if len(kept) == 0 {
+		delete(s[band], key)
+	} else {
+		s[band][key] = kept
+	}
+}
+
 // NewIndex returns an empty banding index for signatures of length
 // bands*rows. Panics if bands <= 0 or rows <= 0.
 func NewIndex(bands, rows int) *Index {
 	if bands <= 0 || rows <= 0 {
 		panic("lsh: bands and rows must be positive")
 	}
-	return &Index{bands: bands, rows: rows, store: make(memStore, bands)}
+	return &Index{
+		bands: bands,
+		rows:  rows,
+		store: make(memStore, bands),
+		keys:  make(map[string][]uint64),
+	}
 }
 
 // Threshold returns the approximate Jaccard similarity at which the
@@ -61,13 +90,43 @@ func (ix *Index) Threshold() float64 {
 }
 
 // Add indexes id under the signature. Ids need not be unique: adding the
-// same id again (with the same or a different signature) is allowed, and a
-// query matching it still returns it once.
+// same id again (with the same or a different signature) is allowed, a
+// query matching it still returns it once, and [Index.Remove] removes all
+// of its entries.
 // Panics if len(sig) != bands*rows.
 func (ix *Index) Add(id string, sig minhash.Signature) {
+	ks := ix.keys[id]
 	for band, key := range ix.bandKeys(sig) {
 		ix.store.add(band, key, id)
+		ks = append(ks, key)
 	}
+	ix.keys[id] = ks
+}
+
+// Remove deletes every entry for id — from all its Adds — and reports
+// whether the id was present. Cost is proportional to the number of Adds
+// times bands, plus the sizes of the touched buckets.
+func (ix *Index) Remove(id string) bool {
+	ks, ok := ix.keys[id]
+	if !ok {
+		return false
+	}
+	for i, key := range ks {
+		ix.store.remove(i%ix.bands, key, id)
+	}
+	delete(ix.keys, id)
+	return true
+}
+
+// Len returns the number of distinct ids currently indexed.
+func (ix *Index) Len() int { return len(ix.keys) }
+
+// Range returns an iterator over the distinct ids in the index, in
+// unspecified order. The index must not be modified during iteration. The
+// index does not store signatures, so rebuilding or migrating an index
+// requires pairing Range with the caller's own signature store.
+func (ix *Index) Range() iter.Seq[string] {
+	return maps.Keys(ix.keys)
 }
 
 // Query returns the ids of signatures that agree with sig on at least one

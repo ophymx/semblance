@@ -1,6 +1,8 @@
 package lsh
 
 import (
+	"iter"
+
 	"github.com/ophymx/semblance/simhash"
 )
 
@@ -17,6 +19,9 @@ import (
 type HammingIndex struct {
 	maxDist int
 	blocks  []block // len maxDist+1
+	// fps records every fingerprint added under each id, so Remove can
+	// find the id's table entries and Range can enumerate contents.
+	fps map[string][]simhash.Fingerprint
 }
 
 type block struct {
@@ -48,19 +53,74 @@ func NewHammingIndex(maxDist int) *HammingIndex {
 		blocks[i] = block{shift: shift, width: width, table: make(map[uint64][]hammingEntry)}
 		shift += width
 	}
-	return &HammingIndex{maxDist: maxDist, blocks: blocks}
+	return &HammingIndex{
+		maxDist: maxDist,
+		blocks:  blocks,
+		fps:     make(map[string][]simhash.Fingerprint),
+	}
 }
 
 // MaxDist returns the distance bound the index answers queries at.
 func (ix *HammingIndex) MaxDist() int { return ix.maxDist }
 
 // Add indexes id under the fingerprint. Ids need not be unique; a query
-// matching an id added multiple times still returns it once.
+// matching an id added multiple times still returns it once, and
+// [HammingIndex.Remove] removes all of its entries.
 func (ix *HammingIndex) Add(id string, fp simhash.Fingerprint) {
 	for i := range ix.blocks {
 		b := &ix.blocks[i]
 		key := b.key(fp)
 		b.table[key] = append(b.table[key], hammingEntry{fp: fp, id: id})
+	}
+	ix.fps[id] = append(ix.fps[id], fp)
+}
+
+// Remove deletes every entry for id — from all its Adds — and reports
+// whether the id was present.
+func (ix *HammingIndex) Remove(id string) bool {
+	fps, ok := ix.fps[id]
+	if !ok {
+		return false
+	}
+	for _, fp := range fps {
+		for i := range ix.blocks {
+			b := &ix.blocks[i]
+			key := b.key(fp)
+			bucket := b.table[key]
+			kept := bucket[:0]
+			for _, e := range bucket {
+				if e.id != id {
+					kept = append(kept, e)
+				}
+			}
+			if len(kept) == 0 {
+				delete(b.table, key)
+			} else {
+				b.table[key] = kept
+			}
+		}
+	}
+	delete(ix.fps, id)
+	return true
+}
+
+// Len returns the number of distinct ids currently indexed.
+func (ix *HammingIndex) Len() int { return len(ix.fps) }
+
+// Range returns an iterator over the (id, fingerprint) pairs in the index
+// — ids added multiple times yield once per Add — in unspecified order.
+// The index must not be modified during iteration. Unlike [Index], the
+// HammingIndex stores its fingerprints, so Range alone suffices to rebuild
+// or migrate one.
+func (ix *HammingIndex) Range() iter.Seq2[string, simhash.Fingerprint] {
+	return func(yield func(string, simhash.Fingerprint) bool) {
+		for id, fps := range ix.fps {
+			for _, fp := range fps {
+				if !yield(id, fp) {
+					return
+				}
+			}
+		}
 	}
 }
 

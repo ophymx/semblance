@@ -106,6 +106,23 @@ block, hits verified against the stored fingerprint. So Query is exact
 (no false positives or negatives), unlike the banding index's candidates.
 Cost: d+1 table entries per Add.
 
+**Index lifecycle (post-v0).** Both indexes support Remove/Len/Range.
+`Index` tracks per-id bucket keys (bands×8 bytes per Add) so Remove can
+find its entries without storing signatures; consequently `Index.Range`
+yields ids only, and rebuild/migration requires the caller's signature
+store (documented). `HammingIndex` already stores fingerprints, so its
+Range yields (id, fingerprint) pairs and suffices to rebuild. Range
+enumeration order is unspecified (map order) — an accepted, documented
+exception to the deterministic-order rule, which continues to hold for
+Query results; enumeration is not a hot path and produces no stored
+artifacts.
+
+**Bytes inputs (post-v0).** The `*Bytes` variants bridge to the string
+implementations via `unsafe.String` — zero-copy, nothing retained or
+mutated; callers must not mutate the slice until iteration completes.
+Single implementation means golden behavior is shared by construction;
+equivalence is fuzz-verified.
+
 **Root package.** `Similarity` detects the degenerate case via the
 empty-set signature (all MaxUint64) rather than counting tokens — no second
 pass over the text. A non-empty document producing that signature would
