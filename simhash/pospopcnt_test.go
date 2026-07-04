@@ -86,3 +86,24 @@ func BenchmarkPospopcnt(b *testing.B) {
 		}
 	})
 }
+
+// BenchmarkPospopcntParallel measures aggregate kernel throughput with all
+// GOMAXPROCS workers saturated — run with -cpu to compare scaling.
+func BenchmarkPospopcntParallel(b *testing.B) {
+	rng := hashutil.SplitMix64(23)
+	block := make([]uint64, 252)
+	for i := range block {
+		block[i] = rng.Next()
+	}
+	run := func(b *testing.B, kernel func(cnt *[64]int32, block []uint64)) {
+		b.SetBytes(int64(8 * len(block)))
+		b.RunParallel(func(pb *testing.PB) {
+			var cnt [64]int32
+			for pb.Next() {
+				kernel(&cnt, block)
+			}
+		})
+	}
+	b.Run("dispatched", func(b *testing.B) { run(b, pospopcnt) })
+	b.Run("generic", func(b *testing.B) { run(b, pospopcntGeneric) })
+}

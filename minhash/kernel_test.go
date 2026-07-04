@@ -92,3 +92,30 @@ func BenchmarkSketchBlock(b *testing.B) {
 	b.Run("dispatched", func(b *testing.B) { run(b, sketchBlock) })
 	b.Run("generic", func(b *testing.B) { run(b, sketchBlockGeneric) })
 }
+
+// BenchmarkSketchBlockParallel measures aggregate kernel throughput with
+// all GOMAXPROCS workers saturated (shared read-only parameters,
+// per-goroutine minima) — run with -cpu to compare scaling.
+func BenchmarkSketchBlockParallel(b *testing.B) {
+	rng := hashutil.SplitMix64(33)
+	fill := func(n int) []uint64 {
+		out := make([]uint64, n)
+		for i := range out {
+			out[i] = rng.Next()
+		}
+		return out
+	}
+	const k = 128
+	pa, pbv, block := fill(k), fill(k), fill(sketchBlockSize)
+	run := func(b *testing.B, kernel func(dst, a, b, block []uint64)) {
+		b.SetBytes(int64(8 * len(block)))
+		b.RunParallel(func(pb *testing.PB) {
+			dst := make([]uint64, k)
+			for pb.Next() {
+				kernel(dst, pa, pbv, block)
+			}
+		})
+	}
+	b.Run("dispatched", func(b *testing.B) { run(b, sketchBlock) })
+	b.Run("generic", func(b *testing.B) { run(b, sketchBlockGeneric) })
+}

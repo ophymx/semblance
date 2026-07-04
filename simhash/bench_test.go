@@ -60,3 +60,14 @@ func BenchmarkDistance(b *testing.B) {
 	}
 	_ = sink
 }
+
+// BenchmarkSketchTextParallel saturates all cores on the full pipeline.
+func BenchmarkSketchTextParallel(b *testing.B) {
+	doc := genDoc(100 << 10)
+	b.SetBytes(int64(len(doc)))
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			simhash.SketchText(doc, 3)
+		}
+	})
+}

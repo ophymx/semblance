@@ -75,3 +75,17 @@ func BenchmarkSketchIntoChar1KB(b *testing.B)    { benchmarkSketchInto(b, genDoc
 func BenchmarkSketchIntoChar100KB(b *testing.B)  { benchmarkSketchInto(b, genDoc(100<<10), "char") }
 func BenchmarkSketchIntoWords1KB(b *testing.B)   { benchmarkSketchInto(b, genDoc(1<<10), "words") }
 func BenchmarkSketchIntoWords100KB(b *testing.B) { benchmarkSketchInto(b, genDoc(100<<10), "words") }
+
+// BenchmarkSketchIntoWordsParallel saturates all cores on the full words
+// pipeline: shared MinHasher and document, per-goroutine signature buffer.
+func BenchmarkSketchIntoWordsParallel(b *testing.B) {
+	doc := genDoc(100 << 10)
+	m := minhash.New(128, 0)
+	b.SetBytes(int64(len(doc)))
+	b.RunParallel(func(pb *testing.PB) {
+		dst := make(minhash.Signature, 128)
+		for pb.Next() {
+			m.SketchInto(dst, shingle.Words(doc, 3))
+		}
+	})
+}

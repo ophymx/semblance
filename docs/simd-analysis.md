@@ -223,3 +223,49 @@ beat assembly twice (CSA, tokenizer) — always prototype pure Go first;
 worth it" call compared across machines and was wrong; (4) all kernels
 remain bit-identical to scalar, enforced by oracle tests and cross-platform
 golden runs on the M1.
+
+## Round 3: multi-threaded scaling (core saturation)
+
+All rounds 0–2 numbers were single-threaded. `*Parallel` benchmark
+variants (shared read-only inputs, per-goroutine outputs, `b.RunParallel`)
+measure aggregate throughput under `-cpu` saturation. Topologies: the
+amd64 dev box behaves as 4 physical cores + SMT (near-linear to `-cpu 4`,
++10–15% more at 8); the M1 Pro is 8P+2E (near-linear to 8, ~+10% from
+E-cores).
+
+Aggregate MB/s (kernel benches on one 256/252-word block; pipelines on
+100 KB docs):
+
+| Benchmark | 1 thread | saturated | scaling |
+|---|---|---|---|
+| amd64 v3 sketchBlock AVX2 | 55 | 178 (@8) | 3.3× |
+| amd64 v3 sketchBlock scalar | 32 | 116 (@8) | 3.6× |
+| amd64 v3 pospopcnt AVX2 | 826 | 2644 (@8) | 3.2× |
+| amd64 v3 pospopcnt scalar | 363 | 1798 (@8) | 4.9× |
+| amd64 v3 minhash Words pipeline | 21 | 78 (@8) | 3.7× |
+| amd64 SketchText pipeline (v1≈v3) | 30 | 115 (@8) | 3.9× |
+| M1 sketchBlock NEON | 190 | 1288 (@10) | 6.8× |
+| M1 sketchBlock scalar | 154 | 1114 (@10) | 7.2× |
+| M1 pospopcnt NEON | 3119 | 22165 (@10) | 7.1× |
+| M1 pospopcnt scalar | 2288 | 17238 (@10) | 7.5× |
+| M1 minhash Words pipeline | 114 | 782 (@10) | 6.8× |
+| M1 SketchText pipeline | 249 | 1797 (@10) | 7.2× |
+
+Findings:
+
+1. **SIMD advantages survive saturation but compress, and more under SMT.**
+   On the amd64 box, sibling hyperthreads share vector ports, so scalar
+   gains more from SMT than vector code: the AVX2 pospopcnt edge falls
+   from 2.3× (single) to 1.5× (saturated); sketchBlock from 1.7× to 1.5×.
+   On the M1 (no SMT) the NEON edge only drifts: 1.24×→1.16× sketchBlock,
+   1.36×→1.29× pospopcnt.
+2. **Nothing became memory-bandwidth-bound.** Kernels are L1-resident and
+   pipeline inputs are shared read-only; scaling is limited by physical
+   core count (and power), not DRAM. Verdicts from single-threaded
+   benchmarks stand — SIMD never inverts to a loss under load here.
+3. **The M1 scales almost ideally** (~7× on 8 P-cores, E-cores adding
+   ~10%): aggregate SimHash sketching hits 1.8 GB/s, the full MinHash
+   words pipeline 780 MB/s.
+4. Caveat: with every core busy, per-core dynamic clocks drop on both
+   machines; single-thread × core-count over-predicts by ~10–20%. Size
+   fleets from the saturated numbers, not the single-thread ones.
