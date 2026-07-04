@@ -85,13 +85,20 @@ func (m *MinHasher) SketchInto(dst Signature, hashes iter.Seq[uint64]) {
 	for i := range dst {
 		dst[i] = math.MaxUint64
 	}
-	a, b := m.a, m.b
+	// Element hashes are buffered into blocks so the kernel can run
+	// permutation-major over contiguous data (see sketchBlock).
+	var buf [sketchBlockSize]uint64
+	n := 0
 	for x := range hashes {
-		for i, ai := range a {
-			if v := ai*x + b[i]; v < dst[i] {
-				dst[i] = v
-			}
+		buf[n] = x
+		n++
+		if n == sketchBlockSize {
+			sketchBlock(dst, m.a, m.b, buf[:])
+			n = 0
 		}
+	}
+	if n > 0 {
+		sketchBlock(dst, m.a, m.b, buf[:n])
 	}
 }
 

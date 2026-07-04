@@ -41,15 +41,16 @@ func TestSketchIntoAllocs(t *testing.T) {
 		wordAllocs := testing.AllocsPerRun(10, func() {
 			m.SketchInto(dst, shingle.Words(doc, 3))
 		})
-		// Measured: the shingler's iterator closure + SketchInto's yield
-		// closure; ring buffers stay on the stack. Exact so any regression
+		// Measured: the shingler's iterator closure, SketchInto's yield
+		// closure, and the 2 KB block buffer (heap-escaped because the
+		// range-over-func body captures it). Exact so any regression
 		// fails, including one that scales with document size. A compiler
 		// upgrade changing inlining may legitimately move this constant.
-		if charAllocs != 2 {
-			t.Errorf("char pipeline at %dB: %v allocs/op, want 2", size, charAllocs)
+		if charAllocs != 3 {
+			t.Errorf("char pipeline at %dB: %v allocs/op, want 3", size, charAllocs)
 		}
-		if wordAllocs != 2 {
-			t.Errorf("word pipeline at %dB: %v allocs/op, want 2", size, wordAllocs)
+		if wordAllocs != 3 {
+			t.Errorf("word pipeline at %dB: %v allocs/op, want 3", size, wordAllocs)
 		}
 		t.Logf("%dB doc: char=%v word=%v allocs/op", size, charAllocs, wordAllocs)
 	}

@@ -128,3 +128,44 @@ its share roughly doubles — do it then.
 Key asymmetry worth remembering: **NEON is nearly useless for the MinHash
 loop** (no 64-bit multiply) but better-suited than expected for SimHash —
 the two sketch types want opposite per-ISA investment.
+
+## Prototype results (targets 0 and 1)
+
+Implemented post-M4. Linux box is amd64 with AVX2 (no AVX-512); arm64
+numbers from an Apple M1 Pro (`jeffreys-mac-mini`), full test suite
+cross-compiled and run there — golden signatures match across platforms.
+
+**Target 0 (batching).** `SketchInto` buffers 256 hashes and calls
+`sketchBlock`; `simhash.Sketch` buffers weight-1 features (255, the CSA
+cap) and processes other weights directly. Words 100 KB: 9.5→8.7 ms
+(+9%), Char: ~42→36.7 ms (+13%) from yield-overhead amortization alone.
+Cost: the block buffer escapes (range-over-func body captures it), +1
+alloc/doc — ratified in the alloc tests (minhash 3, simhash 4). Negative
+finding: a permutation-major scalar kernel lost 10–40% to element-major
+(tried single-accumulator and 4-accumulator variants); the batching still
+gives a future asm kernel its contiguous block, but the scalar fallback
+stays element-major.
+
+**Target 1 (SimHash positional popcount).** The reformulation is the
+whole story: for n unit-weight features, counts[i] = 2·s[i] − n where s is
+the positional popcount, computed with a carry-save adder over 8
+bit-planes (`pospopcnt.go`). Kernel throughput on a 252-word block:
+
+| Kernel | amd64 dev box | M1 Pro |
+|---|---|---|
+| naive per-bit loop (old code) | 10 MB/s | 61 MB/s |
+| scalar CSA (pure Go) | 449 MB/s (~44×) | 2379 MB/s (~39×) |
+| AVX2 (`GOAMD64=v3`) | 709 MB/s (1.6× CSA) | — |
+| NEON | — | 2751 MB/s (1.16× CSA) |
+
+End-to-end `SketchText` 100 KB: 15.3→5.6 ms (**2.7×**) on the dev box,
+0.60 ms on the M1. The headline finding: **the predicted 4–8× SIMD win was
+mostly capturable in pure Go** — the CSA reformulation delivers ~40× at
+the kernel level, and the vector kernels add only 1.2–1.7× on top because
+the pipeline is now tokenizer-bound (revising the priority table: target 4
+is the next bottleneck for SimHash; target 2 still dominates MinHash).
+The AVX2 kernel is gated on the `amd64.v3` build tag (zero new
+dependencies; default `GOAMD64=v1` builds use the CSA kernel), NEON is
+unconditional on arm64. Both kernels are verified against a naive oracle
+across tail lengths and saturation patterns (`TestPospopcnt`), and produce
+bit-identical fingerprints (golden tests).

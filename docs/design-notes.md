@@ -113,24 +113,33 @@ require a permuted hash of MaxUint64 in all k slots (probability ~2^-64k).
 `Config.Bands/Rows` may be left zero when no index is needed; validation of
 Bands×Rows==K happens in NewSketcher when set, and NewIndex panics if unset.
 
-## Measured constants (M1, go1.26)
+## Measured constants (go1.26; post-kernel-prototype)
 
-Sketch pipelines (`SketchInto` + `Char`/`Words` iterator) run at exactly
-2 allocs per document, independent of document size: the shingler's iterator
-closure and the range-over-func yield closure inside `SketchInto`. Ring
-buffers stay stack-allocated. Asserted exactly in `TestSketchIntoAllocs`; a
-compiler change in inlining may legitimately move the constant — update the
-test after verifying the allocs are still O(1) in document size.
+Sketch pipelines run at a small exact alloc constant per document,
+independent of document size, asserted in `TestSketchIntoAllocs` /
+`TestSketchTextAllocs` (a compiler change in inlining may legitimately move
+the constants — update the tests after verifying allocs are still O(1) in
+document size):
 
-Throughput (one core, k=128): char shingles k=8 ≈ 2.4 MB/s (xxhash per
-window is O(n·k) by design — acceptable for v0, revisit only with evidence);
-word shingles w=3 ≈ 10 MB/s.
+- minhash `SketchInto` + `Char`/`Words`: 3 allocs (two pipeline closures +
+  the 2 KB block buffer, which escapes because the range-over-func body
+  captures it).
+- `simhash.SketchText`: 4 allocs (three pipeline closures + the weight-1
+  block buffer).
 
-`simhash.SketchText` runs at exactly 3 allocs per document independent of
-size (Words iterator closure + weight-1 adapter closure + Sketch's yield
-closure), asserted in `TestSketchTextAllocs`; ≈ 7 MB/s at w=3 with the
-naive 64-iteration inner loop — an unrolled/bit-sliced version is a post-v0
-optimization behind the same API.
+Throughput on the amd64 dev box (one core, k=128): char shingles k=8
+≈ 2.8 MB/s (xxhash per window is O(n·k) by design); word shingles w=3
+≈ 12 MB/s; `SketchText` w=3 ≈ 18 MB/s. On an Apple M1 Pro: words
+≈ 82 MB/s, `SketchText` ≈ 169 MB/s.
+
+Kernel structure (post-v0 prototype, see docs/simd-analysis.md for the
+full measurements): minhash sketches via a batched element-major
+`sketchBlock`; simhash's weight-1 path reduces to positional popcount
+(counts[i] = 2·s[i] − n) computed by a carry-save adder over 8 bit-planes,
+with an AVX2 kernel behind the `amd64.v3` build tag and a NEON kernel on
+arm64 — both verified against a naive oracle and bit-identical to the
+scalar path. None of this affects frozen semantics: kernels change speed,
+never signatures.
 
 ## Deviations from spec
 

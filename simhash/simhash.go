@@ -38,7 +38,23 @@ type Fingerprint uint64
 // no-ops; negative weights subtract (a feature may cancel itself out).
 func Sketch(weighted iter.Seq2[uint64, int]) Fingerprint {
 	var counts [64]int
+	// Weight-1 features (the common case) are buffered and folded in
+	// blocks via positional popcount — identical arithmetic, since n
+	// unit features of which s have bit i set contribute 2s-n to
+	// counts[i]. Other weights take the direct per-bit loop. The two
+	// paths interleave freely: counter updates are commutative.
+	var buf [pospopcntBlock]uint64
+	n := 0
 	for h, w := range weighted {
+		if w == 1 {
+			buf[n] = h
+			n++
+			if n == len(buf) {
+				accumulate(&counts, buf[:])
+				n = 0
+			}
+			continue
+		}
 		for i := range counts {
 			if h>>i&1 == 1 {
 				counts[i] += w
@@ -46,6 +62,9 @@ func Sketch(weighted iter.Seq2[uint64, int]) Fingerprint {
 				counts[i] -= w
 			}
 		}
+	}
+	if n > 0 {
+		accumulate(&counts, buf[:n])
 	}
 	var fp Fingerprint
 	for i, c := range counts {

@@ -33,8 +33,10 @@ func TestSketchTextAllocs(t *testing.T) {
 		allocs := testing.AllocsPerRun(10, func() {
 			simhash.SketchText(doc, 3)
 		})
-		if allocs != 3 {
-			t.Errorf("SketchText at %dB: %v allocs/op, want 3", size, allocs)
+		// Iterator + adapter + yield closures, plus the weight-1 block
+		// buffer (heap-escaped by the range-over-func body capture).
+		if allocs != 4 {
+			t.Errorf("SketchText at %dB: %v allocs/op, want 4", size, allocs)
 		}
 		t.Logf("%dB doc: %v allocs/op", size, allocs)
 	}
