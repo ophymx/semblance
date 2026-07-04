@@ -117,6 +117,24 @@ block, hits verified against the stored fingerprint. So Query is exact
 (no false positives or negatives), unlike the banding index's candidates.
 Cost: d+1 table entries per Add.
 
+**Containment & Cardinality (post-v0).** Estimated from signatures alone:
+Cardinality via k/Σ(vᵢ/2⁶⁴) − 1 (datasketch's estimator), Containment by
+combining it with the Jaccard estimate. Known limitation, documented and
+tested against its own error model: absolute error grows ~sqrt(R·c/k)
+with the size ratio R = (|A|+|B|)/|A|, so small-in-large containment is a
+coarse signal at default k — the precise fix is LSH-Ensemble-style
+sketching, deferred until needed. Estimator formulas may improve within a
+major version (they derive from stored signatures; changing them does not
+break stored data).
+
+**Winnowing (post-v0).** `winnow` implements standard winnowing (rightmost
+minimum per window), NOT the paper's "robust" tie-break variant: standard
+keeps the strict guarantee (any shared run of w+k−1 bytes matches) that
+robust trades for fewer fingerprints in repetitive text. Selection scheme
+is frozen (golden test); implementation verified against a naive
+every-window oracle including tie-heavy inputs, and the guarantee is
+fuzz-tested.
+
 **Index lifecycle (post-v0).** Both indexes support Remove/Len/Range.
 `Index` tracks per-id bucket keys (bands×8 bytes per Add) so Remove can
 find its entries without storing signatures; consequently `Index.Range`

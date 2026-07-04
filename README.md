@@ -35,9 +35,10 @@ frozen defaults (word shingles of width 3, 128-value signatures, seed 0,
 | Package   | What it gives you |
 |-----------|-------------------|
 | `shingle` | Text → stream of shingle hashes (`iter.Seq[uint64]`): character k-grams (`Char`, `CharRunes`) or word w-grams (`Words`), hashed incrementally with zero per-shingle allocations |
-| `minhash` | Shingle stream → fixed-size `Signature`; `Jaccard` estimates set similarity with standard error ≈ 1/(2√k); signatures are mergeable (`Union`) |
+| `minhash` | Shingle stream → fixed-size `Signature`; `Jaccard` estimates set similarity with standard error ≈ 1/(2√k); asymmetric `Containment` ("how much of A is in B") and `Cardinality` come free from the same signatures; mergeable (`Union`) |
 | `simhash` | Weighted features → 64-bit `Fingerprint`; Hamming `Distance` tracks cosine similarity |
 | `lsh`     | `Index` (MinHash banding: sub-linear candidate retrieval above a similarity threshold) and `HammingIndex` (all stored fingerprints within distance ≤ 3, exact) |
+| `winnow`  | Position-aware winnowing fingerprints (the MOSS algorithm): locate *where* documents overlap; any shared run of w+k−1 bytes is guaranteed a match |
 
 Reusable, configurable pipeline:
 
@@ -93,6 +94,8 @@ exposes the frozen primitives and you own the I/O:
   Compression and Complexity of Sequences, 1997.
 - M. Charikar. *Similarity estimation techniques from rounding algorithms.*
   STOC 2002.
+- S. Schleimer, D. Wilkerson, A. Aiken. *Winnowing: local algorithms for
+  document fingerprinting.* SIGMOD 2003.
 - G. S. Manku, A. Jain, A. Das Sarma. *Detecting near-duplicates for web
   crawling.* WWW 2007.
 - J. Leskovec, A. Rajaraman, J. Ullman. *Mining of Massive Datasets*, ch. 3
