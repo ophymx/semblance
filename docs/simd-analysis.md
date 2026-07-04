@@ -179,9 +179,20 @@ multiply (3× vpmuludq) and sign-biased unsigned min, two accumulators to
 halve the compare/blend chain. Kernel: 87.8→36.9 µs per block at k=128
 (**2.4×** — the 2–3× prediction held here). End-to-end 100 KB: Char
 34.8→19.7 ms (**1.77×**), Words 8.4→6.5 ms (1.28×, tokenizer-bound).
-NEON verdict confirmed empirically without writing it: the M1 Pro runs the
-*scalar* kernel at 13.4 µs/block — 2.75× faster than this box's AVX2 — so
-a NEON MinHash kernel is not worth pursuing.
+
+**NEON MinHash kernel — a correction.** Round 2 initially dismissed NEON
+by comparing the M1's scalar kernel (13.4 µs/block) against this box's
+AVX2 (36.9 µs) — a cross-machine comparison that says nothing about NEON.
+Measured properly (same M1, NEON vs scalar): kernel 13.4→10.8 µs
+(**1.24×**), end-to-end Char 6.2→5.1 ms (**1.21×**), Words 1.05→0.90 ms
+(1.17×). That lands at the top of the original "parity to 1.3×"
+prediction and is worth its ~90 lines: `sketchBlockNEON` mirrors the AVX2
+structure, synthesizing the 64-bit multiply from umull/umlal cross terms
+and the unsigned min from cmhi+bit. XTN/UMULL/UMLAL/CMHI are outside the
+Go assembler's arm64 vocabulary and are emitted as hand-encoded WORD
+directives, verified by the kernel oracle test on hardware.
+Methodology lesson recorded: **ISA verdicts require same-machine
+baselines.**
 
 **Target 4 (tokenizer, pure Go — no SIMD needed yet).** All-lowercase-ASCII
 tokens (the common case) now hash directly from the string, zero-copy; only
@@ -206,9 +217,9 @@ baseline** (GOAMD64=v3 builds; v1 builds keep the pure-Go wins only):
 
 Standing conclusions: (1) algorithmic reformulation and scalar fast paths
 beat assembly twice (CSA, tokenizer) — always prototype pure Go first;
-(2) AVX2 pays only where 64-bit arithmetic is unavoidable and dominant
-(the MinHash loop, equality counting); (3) Apple-class arm64 scalar
-pipelines outrun our AVX2 synthesis — NEON investment remains unjustified
-everywhere except the already-written pospopcnt kernel; (4) all kernels
+(2) vector kernels pay where 64-bit arithmetic is unavoidable and dominant
+(the MinHash loop, equality counting): 2.4× on AVX2, 1.24× on NEON;
+(3) ISA verdicts require same-machine baselines — the first "NEON not
+worth it" call compared across machines and was wrong; (4) all kernels
 remain bit-identical to scalar, enforced by oracle tests and cross-platform
 golden runs on the M1.
