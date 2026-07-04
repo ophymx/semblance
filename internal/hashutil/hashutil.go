@@ -23,6 +23,15 @@ func (s *SplitMix64) Next() uint64 {
 	return z ^ (z >> 31)
 }
 
+// Mix64 scrambles a 64-bit value with the SplitMix64 step:
+// Mix64(x) == SplitMix64(x).Next(). Frozen via the SplitMix64 goldens.
+func Mix64(x uint64) uint64 {
+	x += 0x9E3779B97F4A7C15
+	x = (x ^ (x >> 30)) * 0xBF58476D1CE4E5B9
+	x = (x ^ (x >> 27)) * 0x94D049BB133111EB
+	return x ^ (x >> 31)
+}
+
 // MixInit is the initial accumulator value for Mix chains.
 const MixInit uint64 = 0xC2B2AE3D27D4EB4F
 

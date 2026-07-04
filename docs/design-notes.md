@@ -66,6 +66,7 @@ incompatible sketch families can never silently mix in storage):
 |----|--------|
 | 1  | MinHash, k independent multiply-add permutations (v0) |
 | 2  | SimHash, 64-bit |
+| 3  | HyperLogLog, dense 8-bit registers (post-v0) |
 
 Reserve new ids for post-v0 families (one-permutation hashing, b-bit
 compaction) instead of reusing these.
