@@ -197,3 +197,11 @@ func FuzzSketchText(f *testing.F) {
 		}
 	})
 }
+
+func TestSketchTextBytes(t *testing.T) {
+	for _, text := range []string{"", "one two three four five", "HÉLLO wörld naïve", "\xffbad utf8\xfe words here"} {
+		if got, want := simhash.SketchTextBytes([]byte(text), 2), simhash.SketchText(text, 2); got != want {
+			t.Errorf("SketchTextBytes(%q) = %#x, want %#x", text, got, want)
+		}
+	}
+}

@@ -80,7 +80,16 @@ func Sketch(weighted iter.Seq2[uint64, int]) Fingerprint {
 // See [shingle.Words] for tokenization. Text with fewer than w tokens
 // produces the zero Fingerprint. Panics if w <= 0.
 func SketchText(text string, w int) Fingerprint {
-	shingles := shingle.Words(text, w) // validate w eagerly
+	return sketchShingles(shingle.Words(text, w)) // validate w eagerly
+}
+
+// SketchTextBytes is [SketchText] for a byte slice, without copying. The
+// slice is not retained or mutated.
+func SketchTextBytes(b []byte, w int) Fingerprint {
+	return sketchShingles(shingle.WordsBytes(b, w))
+}
+
+func sketchShingles(shingles iter.Seq[uint64]) Fingerprint {
 	return Sketch(func(yield func(uint64, int) bool) {
 		for h := range shingles {
 			if !yield(h, 1) {

@@ -211,3 +211,25 @@ func FuzzWords(f *testing.F) {
 		}
 	})
 }
+
+// FuzzBytesEquivalence cross-checks every *Bytes variant against its
+// string counterpart on arbitrary inputs.
+func FuzzBytesEquivalence(f *testing.F) {
+	f.Add("hello world", 3)
+	f.Add("\xff\xfe a\xffb", 2)
+	f.Fuzz(func(t *testing.T, text string, n int) {
+		if n <= 0 || n > 64 {
+			t.Skip()
+		}
+		b := []byte(text)
+		if !slices.Equal(slices.Collect(shingle.CharBytes(b, n)), slices.Collect(shingle.Char(text, n))) {
+			t.Fatal("CharBytes diverges from Char")
+		}
+		if !slices.Equal(slices.Collect(shingle.CharRunesBytes(b, n)), slices.Collect(shingle.CharRunes(text, n))) {
+			t.Fatal("CharRunesBytes diverges from CharRunes")
+		}
+		if !slices.Equal(slices.Collect(shingle.WordsBytes(b, n)), slices.Collect(shingle.Words(text, n))) {
+			t.Fatal("WordsBytes diverges from Words")
+		}
+	})
+}

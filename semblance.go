@@ -84,10 +84,22 @@ func (s *Sketcher) Sketch(text string) minhash.Signature {
 	return s.hasher.Sketch(shingle.Words(text, s.cfg.W))
 }
 
+// SketchBytes is [Sketcher.Sketch] for a byte slice, without copying. The
+// slice is not retained or mutated.
+func (s *Sketcher) SketchBytes(b []byte) minhash.Signature {
+	return s.hasher.Sketch(shingle.WordsBytes(b, s.cfg.W))
+}
+
 // SketchInto sketches text into dst, overwriting it — the low-allocation
 // path for bulk sketching. Panics if len(dst) != K.
 func (s *Sketcher) SketchInto(dst minhash.Signature, text string) {
 	s.hasher.SketchInto(dst, shingle.Words(text, s.cfg.W))
+}
+
+// SketchIntoBytes is [Sketcher.SketchInto] for a byte slice, without
+// copying. The slice is not retained or mutated. Panics if len(dst) != K.
+func (s *Sketcher) SketchIntoBytes(dst minhash.Signature, b []byte) {
+	s.hasher.SketchInto(dst, shingle.WordsBytes(b, s.cfg.W))
 }
 
 // Similarity estimates the Jaccard similarity of the two texts' word

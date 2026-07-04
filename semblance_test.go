@@ -123,3 +123,16 @@ func TestPipelineWithIndex(t *testing.T) {
 		t.Errorf("Query returned unrelated document: %v", got)
 	}
 }
+
+func TestSketchBytesMatchesSketch(t *testing.T) {
+	sk := semblance.NewSketcher(semblance.Defaults())
+	text := "the quick brown fox jumps over the lazy dog"
+	if !slices.Equal(sk.SketchBytes([]byte(text)), sk.Sketch(text)) {
+		t.Error("SketchBytes and Sketch disagree")
+	}
+	dst := make(minhash.Signature, semblance.Defaults().K)
+	sk.SketchIntoBytes(dst, []byte(text))
+	if !slices.Equal(dst, sk.Sketch(text)) {
+		t.Error("SketchIntoBytes and Sketch disagree")
+	}
+}

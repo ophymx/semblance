@@ -21,11 +21,24 @@ import (
 	"iter"
 	"unicode"
 	"unicode/utf8"
+	"unsafe"
 
 	"github.com/cespare/xxhash/v2"
 
 	"github.com/ophymx/semblance/internal/hashutil"
 )
+
+// The *Bytes variants share the string implementations through a zero-copy
+// view (unsafe.String): no bytes are copied, mutated, or retained beyond
+// iteration. In exchange, the caller must not mutate the slice until
+// iteration of the returned sequence completes.
+
+func bytesToString(b []byte) string {
+	if len(b) == 0 {
+		return ""
+	}
+	return unsafe.String(unsafe.SliceData(b), len(b))
+}
 
 // Char returns an iterator over xxhash values of the overlapping k-byte
 // windows of text. Windows are byte-based; multi-byte UTF-8 sequences may be
@@ -44,6 +57,12 @@ func Char(text string, k int) iter.Seq[uint64] {
 			}
 		}
 	}
+}
+
+// CharBytes is [Char] for a byte slice, without copying. The slice must not
+// be mutated until iteration completes.
+func CharBytes(b []byte, k int) iter.Seq[uint64] {
+	return Char(bytesToString(b), k)
 }
 
 // CharRunes returns an iterator over xxhash values of the overlapping k-rune
@@ -72,6 +91,12 @@ func CharRunes(text string, k int) iter.Seq[uint64] {
 			}
 		}
 	}
+}
+
+// CharRunesBytes is [CharRunes] for a byte slice, without copying. The
+// slice must not be mutated until iteration completes.
+func CharRunesBytes(b []byte, k int) iter.Seq[uint64] {
+	return CharRunes(bytesToString(b), k)
 }
 
 // Words returns an iterator over hashes of the overlapping w-word shingles
@@ -105,6 +130,12 @@ func Words(text string, w int) iter.Seq[uint64] {
 			return yield(h)
 		})
 	}
+}
+
+// WordsBytes is [Words] for a byte slice, without copying. The slice must
+// not be mutated until iteration completes.
+func WordsBytes(b []byte, w int) iter.Seq[uint64] {
+	return Words(bytesToString(b), w)
 }
 
 // tokenHashes scans text for tokens (maximal runs of letters/numbers),
