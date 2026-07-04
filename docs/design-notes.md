@@ -37,6 +37,18 @@ via `go test ./minhash -run TestGoldenSignatures -update`).
 **Empty-set signature.** Zero input hashes leave every slot at MaxUint64;
 `Jaccard(empty, empty) == 1` by construction.
 
+## Frozen primitives (M2)
+
+**SimHash bit rule.** Bit i of the fingerprint is 1 iff the weighted sum of
+feature-hash bits i is strictly positive — ties round to 0. Features are the
+same word shingles as minhash uses (`SketchText`), or arbitrary
+(hash, weight) pairs via `Sketch`; weight n is exactly equivalent to n
+repetitions at weight 1, zero weights are no-ops, negative weights subtract.
+Empty input → zero fingerprint (so two empty inputs compare as identical,
+mirroring minhash's empty-set signature). Pinned by
+`simhash/testdata/golden.json` (regenerate via
+`go test ./simhash -run TestGoldenFingerprints -update`).
+
 ## Measured constants (M1, go1.26)
 
 Sketch pipelines (`SketchInto` + `Char`/`Words` iterator) run at exactly
@@ -49,6 +61,12 @@ test after verifying the allocs are still O(1) in document size.
 Throughput (one core, k=128): char shingles k=8 ≈ 2.4 MB/s (xxhash per
 window is O(n·k) by design — acceptable for v0, revisit only with evidence);
 word shingles w=3 ≈ 10 MB/s.
+
+`simhash.SketchText` runs at exactly 3 allocs per document independent of
+size (Words iterator closure + weight-1 adapter closure + Sketch's yield
+closure), asserted in `TestSketchTextAllocs`; ≈ 7 MB/s at w=3 with the
+naive 64-iteration inner loop — an unrolled/bit-sliced version is a post-v0
+optimization behind the same API.
 
 ## Deviations from spec
 

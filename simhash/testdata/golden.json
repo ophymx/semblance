@@ -1,0 +1,32 @@
+[
+  {
+    "name": "basic",
+    "text": "The quick brown fox jumps over the lazy dog",
+    "w": 3,
+    "fingerprint": "52f39a596b4bb5fb"
+  },
+  {
+    "name": "bigram",
+    "text": "The quick brown fox jumps over the lazy dog",
+    "w": 2,
+    "fingerprint": "006c3206b01c8274"
+  },
+  {
+    "name": "mixed case ascii",
+    "text": "Deterministic, Heuristic, FAST text similarity sketching for Go 1.25",
+    "w": 2,
+    "fingerprint": "7505d632ff7c05d3"
+  },
+  {
+    "name": "stable non-ascii",
+    "text": "résumé façade naïve puzzle",
+    "w": 2,
+    "fingerprint": "7841a3b2676e4c32"
+  },
+  {
+    "name": "empty",
+    "text": "",
+    "w": 3,
+    "fingerprint": "0000000000000000"
+  }
+]
