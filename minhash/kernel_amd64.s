@@ -1,5 +1,3 @@
-//go:build amd64.v3
-
 #include "textflag.h"
 
 // func sketchBlockAVX2(dst, a, b, block []uint64)

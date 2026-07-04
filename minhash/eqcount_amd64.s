@@ -1,5 +1,3 @@
-//go:build amd64.v3
-
 #include "textflag.h"
 
 // func eqCountAVX2(a, b []uint64) int

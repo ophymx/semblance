@@ -1,4 +1,4 @@
-//go:build !amd64.v3 && !arm64
+//go:build !amd64 && !arm64
 
 package simhash
 

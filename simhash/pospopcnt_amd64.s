@@ -1,5 +1,3 @@
-//go:build amd64.v3
-
 #include "textflag.h"
 
 // func csaAVX2(planes *[8][4]uint64, block []uint64)

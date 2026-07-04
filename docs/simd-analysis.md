@@ -301,3 +301,20 @@ one document supplies unlimited independent work items:
   (structure-of-arrays): each vpcmpeqq lane is a *candidate*, the direct
   analog of minio's lane-is-a-stream. Needs a batch-verify API in lsh;
   the most promising unexplored kernel for verification-heavy dedup.
+
+## Round 4: runtime AVX2 dispatch (reach)
+
+The `amd64.v3` build-tag gating meant default `go build` binaries (v1)
+never executed any AVX2 kernel — the speedups existed only for the ~nobody
+who sets GOAMD64=v3. Replaced with runtime dispatch: `internal/cpuinfo`
+detects AVX2 with a hand-rolled CPUID + OSXSAVE/XGETBV check (~40 lines,
+zero new dependencies, honoring the spec's minimal-deps principle over
+x/sys/cpu), and each kernel package gates on a `useAVX2` package var —
+a var, not a const, so `TestDispatchBothPaths` flips it to cover the
+generic fallback branch even on AVX2 CI machines. The branch cost is
+amortized over a block per call: not measurable.
+
+Default-build benchmarks now match the old v3 numbers (Jaccard 92 ns,
+Words 100 KB ≈ 5.6 ms). NEON needed no equivalent — it is baseline on
+arm64 and always shipped by default. GOAMD64=v3 builds remain valid but
+no longer select different source files; the dedicated CI step is gone.

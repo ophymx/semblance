@@ -1,5 +1,3 @@
-//go:build amd64.v3
-
 package minhash
 
 // eqCountAVX2 counts positions where a and b match, four lanes per
@@ -12,7 +10,7 @@ func eqCountAVX2(a, b []uint64) int
 func eqCount(a, b []uint64) int {
 	n := len(a) &^ 3
 	eq := 0
-	if n >= 16 {
+	if useAVX2 && n >= 16 {
 		eq = eqCountAVX2(a[:n], b[:n])
 		a, b = a[n:], b[n:]
 	}

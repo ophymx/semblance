@@ -134,10 +134,14 @@ Throughput on the amd64 dev box (one core, k=128): char shingles k=8
 
 Kernel structure (post-v0 prototype, see docs/simd-analysis.md for the
 full measurements): minhash sketches via a batched element-major
-`sketchBlock`; simhash's weight-1 path reduces to positional popcount
+`sketchBlock` with AVX2 and NEON variants, plus an AVX2 `eqCount` behind
+`Jaccard`; simhash's weight-1 path reduces to positional popcount
 (counts[i] = 2·s[i] − n) computed by a carry-save adder over 8 bit-planes,
-with an AVX2 kernel behind the `amd64.v3` build tag and a NEON kernel on
-arm64 — both verified against a naive oracle and bit-identical to the
+with AVX2 and NEON kernels. AVX2 kernels dispatch at runtime via
+`internal/cpuinfo` (hand-rolled CPUID/XGETBV, zero dependencies), so
+default builds get them on capable CPUs; NEON is unconditional on arm64.
+All kernels are verified against naive oracles, both dispatch branches are
+tested (`TestDispatchBothPaths`), and everything is bit-identical to the
 scalar path. None of this affects frozen semantics: kernels change speed,
 never signatures.
 
