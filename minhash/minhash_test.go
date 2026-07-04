@@ -185,3 +185,52 @@ func TestConcurrentSketch(t *testing.T) {
 		}
 	}
 }
+
+func TestResetUpdateMatchesSketch(t *testing.T) {
+	rng := hashutil.SplitMix64(71)
+	elems := make([]uint64, 700)
+	for i := range elems {
+		elems[i] = rng.Next()
+	}
+	m := minhash.New(64, 9)
+	want := m.Sketch(seq(elems))
+
+	// Any partitioning of the elements into Update calls is equivalent.
+	for _, chunk := range []int{1, 3, 256, 700} {
+		dst := make(minhash.Signature, 64)
+		m.Reset(dst)
+		for i := 0; i < len(elems); i += chunk {
+			m.Update(dst, elems[i:min(i+chunk, len(elems))])
+		}
+		if !slices.Equal(dst, want) {
+			t.Errorf("chunk=%d: Reset+Update diverges from Sketch", chunk)
+		}
+	}
+
+	// Update with no hashes is a no-op; Reset yields the empty signature.
+	dst := make(minhash.Signature, 64)
+	m.Reset(dst)
+	m.Update(dst, nil)
+	for _, v := range dst {
+		if v != math.MaxUint64 {
+			t.Fatal("Reset+empty Update is not the empty-set signature")
+		}
+	}
+}
+
+func TestResetUpdatePanics(t *testing.T) {
+	m := minhash.New(8, 0)
+	for name, fn := range map[string]func(){
+		"Reset":  func() { m.Reset(make(minhash.Signature, 7)) },
+		"Update": func() { m.Update(make(minhash.Signature, 7), []uint64{1}) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			defer func() {
+				if recover() == nil {
+					t.Error("expected panic, got none")
+				}
+			}()
+			fn()
+		})
+	}
+}

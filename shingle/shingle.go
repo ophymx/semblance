@@ -138,6 +138,56 @@ func WordsBytes(b []byte, w int) iter.Seq[uint64] {
 	return Words(bytesToString(b), w)
 }
 
+// WordsBlocks scans text once and delivers its w-word shingle hashes in
+// blocks: it fills block and calls flush(block[:n]) each time the block
+// fills, and once more with any remainder. flush is never called with an
+// empty slice; returning false stops the scan. The hash sequence is
+// exactly that of [Words] — WordsBlocks is the fused path used by the
+// convenience sketchers, trading the per-shingle iterator hand-off for one
+// callback per block.
+//
+// Panics if w <= 0 or len(block) == 0.
+func WordsBlocks(text string, w int, block []uint64, flush func(hashes []uint64) bool) {
+	if w <= 0 {
+		panic("shingle: w must be positive")
+	}
+	if len(block) == 0 {
+		panic("shingle: block must not be empty")
+	}
+	window := make([]uint64, w) // ring buffer of token hashes
+	n := 0                      // tokens seen
+	nb := 0                     // shingles buffered
+	ok := true
+	tokenHashes(text, func(th uint64) bool {
+		window[n%w] = th
+		n++
+		if n < w {
+			return true
+		}
+		acc := hashutil.MixInit
+		for j := 0; j < w; j++ {
+			acc = hashutil.Mix(acc, window[(n+j)%w])
+		}
+		block[nb] = acc
+		nb++
+		if nb == len(block) {
+			ok = flush(block)
+			nb = 0
+			return ok
+		}
+		return true
+	})
+	if ok && nb > 0 {
+		flush(block[:nb])
+	}
+}
+
+// WordsBlocksBytes is [WordsBlocks] for a byte slice, without copying. The
+// slice must not be mutated before the scan completes.
+func WordsBlocksBytes(b []byte, w int, block []uint64, flush func(hashes []uint64) bool) {
+	WordsBlocks(bytesToString(b), w, block, flush)
+}
+
 // tokenHashes scans text for tokens (maximal runs of letters/numbers),
 // lowercases them, and calls emit with the xxhash of each token's lowercased
 // UTF-8 bytes. Stops early if emit returns false.

@@ -33,10 +33,10 @@ func TestSketchTextAllocs(t *testing.T) {
 		allocs := testing.AllocsPerRun(10, func() {
 			simhash.SketchText(doc, 3)
 		})
-		// Iterator + adapter + yield closures, plus the weight-1 block
-		// buffer (heap-escaped by the range-over-func body capture).
-		if allocs != 4 {
-			t.Errorf("SketchText at %dB: %v allocs/op, want 4", size, allocs)
+		// The fused block path leaves a single escape (the flush
+		// closure's captured state); the old iterator chain cost 4.
+		if allocs != 1 {
+			t.Errorf("SketchText at %dB: %v allocs/op, want 1", size, allocs)
 		}
 		t.Logf("%dB doc: %v allocs/op", size, allocs)
 	}

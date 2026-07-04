@@ -318,3 +318,26 @@ Default-build benchmarks now match the old v3 numbers (Jaccard 92 ns,
 Words 100 KB ≈ 5.6 ms). NEON needed no equivalent — it is baseline on
 arm64 and always shipped by default. GOAMD64=v3 builds remain valid but
 no longer select different source files; the dedicated CI step is gone.
+
+## Round 5: fused sketch path (the iterator tax, measured honestly)
+
+Profiles showed ~45% of SketchText flat time in the word-shingle closure
+chain, suggesting a large win from fusing tokenize→shingle→sketch.
+Implemented as `shingle.WordsBlocks` (scan + fold + block delivery, one
+flush callback per block instead of per-shingle yields) feeding new public
+`minhash.Reset`/`Update` primitives; `simhash.SketchText`,
+`SketchTextBytes`, and the root `Sketcher` now use it. The composable
+`iter.Seq` API is unchanged, and golden tests pin that outputs are
+identical.
+
+Result — smaller than the profile suggested: SketchText **1.15×** on both
+amd64 and the M1 (the 45% flat entry was mostly *real fold work* that
+fusion keeps, not call overhead), Sketcher minhash path ~1.05×. The
+solid win is allocations: SketchText 4→1, Sketcher.SketchInto 3→1 per
+document (the block lives inside the fused scan; only one closure
+escape remains). Lesson: flat profile percentages attribute *work located
+in* a closure, not *overhead caused by* the closure — the hand-off tax
+was only the 2–3 indirect calls per token, worth ~15% with two extra
+layers (simhash) and ~5% with one (minhash). Reset/Update also give
+callers chunked/incremental sketching, a step toward the streaming
+use case.

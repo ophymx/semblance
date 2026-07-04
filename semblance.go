@@ -81,25 +81,41 @@ func (s *Sketcher) Config() Config { return s.cfg }
 // math.MaxUint64); see [Similarity] for how the convenience layer treats
 // those.
 func (s *Sketcher) Sketch(text string) minhash.Signature {
-	return s.hasher.Sketch(shingle.Words(text, s.cfg.W))
+	dst := make(minhash.Signature, s.cfg.K)
+	s.SketchInto(dst, text)
+	return dst
 }
 
 // SketchBytes is [Sketcher.Sketch] for a byte slice, without copying. The
 // slice is not retained or mutated.
 func (s *Sketcher) SketchBytes(b []byte) minhash.Signature {
-	return s.hasher.Sketch(shingle.WordsBytes(b, s.cfg.W))
+	dst := make(minhash.Signature, s.cfg.K)
+	s.SketchIntoBytes(dst, b)
+	return dst
 }
 
 // SketchInto sketches text into dst, overwriting it — the low-allocation
 // path for bulk sketching. Panics if len(dst) != K.
 func (s *Sketcher) SketchInto(dst minhash.Signature, text string) {
-	s.hasher.SketchInto(dst, shingle.Words(text, s.cfg.W))
+	// Fused path: shingle blocks feed the hasher directly, with no
+	// per-shingle iterator hand-off (identical signatures, golden-tested).
+	s.hasher.Reset(dst)
+	var block [256]uint64
+	shingle.WordsBlocks(text, s.cfg.W, block[:], func(hashes []uint64) bool {
+		s.hasher.Update(dst, hashes)
+		return true
+	})
 }
 
 // SketchIntoBytes is [Sketcher.SketchInto] for a byte slice, without
 // copying. The slice is not retained or mutated. Panics if len(dst) != K.
 func (s *Sketcher) SketchIntoBytes(dst minhash.Signature, b []byte) {
-	s.hasher.SketchInto(dst, shingle.WordsBytes(b, s.cfg.W))
+	s.hasher.Reset(dst)
+	var block [256]uint64
+	shingle.WordsBlocksBytes(b, s.cfg.W, block[:], func(hashes []uint64) bool {
+		s.hasher.Update(dst, hashes)
+		return true
+	})
 }
 
 // Similarity estimates the Jaccard similarity of the two texts' word

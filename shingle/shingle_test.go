@@ -233,3 +233,23 @@ func FuzzBytesEquivalence(f *testing.F) {
 		}
 	})
 }
+
+// FuzzWordsBlocks cross-checks the fused block path against Words on
+// arbitrary inputs and block sizes.
+func FuzzWordsBlocks(f *testing.F) {
+	f.Add("hello world how are you", 3, 4)
+	f.Add("\xff\xfe a\xffb", 1, 1)
+	f.Fuzz(func(t *testing.T, text string, w int, blockSize int) {
+		if w <= 0 || w > 64 || blockSize <= 0 || blockSize > 1024 {
+			t.Skip()
+		}
+		var got []uint64
+		shingle.WordsBlocks(text, w, make([]uint64, blockSize), func(h []uint64) bool {
+			got = append(got, h...)
+			return true
+		})
+		if !slices.Equal(got, slices.Collect(shingle.Words(text, w))) {
+			t.Fatal("WordsBlocks diverges from Words")
+		}
+	})
+}

@@ -79,27 +79,49 @@ func (m *MinHasher) Sketch(hashes iter.Seq[uint64]) Signature {
 // per-document signature allocation of [MinHasher.Sketch]. Panics if
 // len(dst) != k.
 func (m *MinHasher) SketchInto(dst Signature, hashes iter.Seq[uint64]) {
-	if len(dst) != len(m.a) {
-		panic("minhash: dst length does not match k")
-	}
-	for i := range dst {
-		dst[i] = math.MaxUint64
-	}
-	// Element hashes are buffered into blocks so the kernel can run
-	// permutation-major over contiguous data (see sketchBlock).
+	m.Reset(dst)
+	// Element hashes are buffered into blocks so the kernel can run over
+	// contiguous data (see sketchBlock).
 	var buf [sketchBlockSize]uint64
 	n := 0
 	for x := range hashes {
 		buf[n] = x
 		n++
 		if n == sketchBlockSize {
-			sketchBlock(dst, m.a, m.b, buf[:])
+			m.Update(dst, buf[:])
 			n = 0
 		}
 	}
 	if n > 0 {
-		sketchBlock(dst, m.a, m.b, buf[:n])
+		m.Update(dst, buf[:n])
 	}
+}
+
+// Reset initializes dst to the empty-set signature (all math.MaxUint64),
+// ready for [MinHasher.Update]. Panics if len(dst) != k.
+func (m *MinHasher) Reset(dst Signature) {
+	if len(dst) != len(m.a) {
+		panic("minhash: dst length does not match k")
+	}
+	for i := range dst {
+		dst[i] = math.MaxUint64
+	}
+}
+
+// Update folds a batch of element hashes into dst, which must have been
+// initialized by [MinHasher.Reset] (or hold a previous sketch to merge
+// into: updating is the same element-wise minimum that [Union] computes).
+// Reset + any partitioning of a document's hashes into Update calls
+// produces the identical signature to [MinHasher.Sketch]. Panics if
+// len(dst) != k.
+func (m *MinHasher) Update(dst Signature, hashes []uint64) {
+	if len(dst) != len(m.a) {
+		panic("minhash: dst length does not match k")
+	}
+	if len(hashes) == 0 {
+		return
+	}
+	sketchBlock(dst, m.a, m.b, hashes)
 }
 
 // Jaccard estimates the Jaccard similarity of the sets a and b were

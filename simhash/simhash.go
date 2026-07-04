@@ -66,6 +66,10 @@ func Sketch(weighted iter.Seq2[uint64, int]) Fingerprint {
 	if n > 0 {
 		accumulate(&counts, buf[:n])
 	}
+	return fingerprint(&counts)
+}
+
+func fingerprint(counts *[64]int) Fingerprint {
 	var fp Fingerprint
 	for i, c := range counts {
 		if c > 0 {
@@ -80,23 +84,28 @@ func Sketch(weighted iter.Seq2[uint64, int]) Fingerprint {
 // See [shingle.Words] for tokenization. Text with fewer than w tokens
 // produces the zero Fingerprint. Panics if w <= 0.
 func SketchText(text string, w int) Fingerprint {
-	return sketchShingles(shingle.Words(text, w)) // validate w eagerly
+	// Fused path: shingle blocks feed the positional-popcount accumulator
+	// directly, with no per-shingle iterator hand-off. Identical
+	// arithmetic to Sketch over Words with weight 1 (golden-tested).
+	var counts [64]int
+	var block [pospopcntBlock]uint64
+	shingle.WordsBlocks(text, w, block[:], func(hashes []uint64) bool {
+		accumulate(&counts, hashes)
+		return true
+	})
+	return fingerprint(&counts)
 }
 
 // SketchTextBytes is [SketchText] for a byte slice, without copying. The
 // slice is not retained or mutated.
 func SketchTextBytes(b []byte, w int) Fingerprint {
-	return sketchShingles(shingle.WordsBytes(b, w))
-}
-
-func sketchShingles(shingles iter.Seq[uint64]) Fingerprint {
-	return Sketch(func(yield func(uint64, int) bool) {
-		for h := range shingles {
-			if !yield(h, 1) {
-				return
-			}
-		}
+	var counts [64]int
+	var block [pospopcntBlock]uint64
+	shingle.WordsBlocksBytes(b, w, block[:], func(hashes []uint64) bool {
+		accumulate(&counts, hashes)
+		return true
 	})
+	return fingerprint(&counts)
 }
 
 // Distance returns the Hamming distance between two fingerprints: the
