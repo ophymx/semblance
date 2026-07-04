@@ -59,6 +59,11 @@ candidates := ix.Query(sk.Sketch(query)) // verify candidates with minhash.Jacca
   allocations per document, asserted in tests.
 - **Heuristic, not exact.** Everything is an estimator with documented
   error bounds; LSH returns candidates for the caller to verify.
+- **Storable.** Signatures and fingerprints have a stable, versioned binary
+  encoding (`minhash.MinHasher.MarshalSignature`,
+  `simhash.Fingerprint.MarshalBinary`); stored signatures are
+  self-describing and remain comparable across releases within a major
+  version.
 - **Not** an NLP toolkit (no stemming, stopwords, language detection), not
   a search engine, nothing non-deterministic.
 

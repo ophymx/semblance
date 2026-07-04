@@ -45,10 +45,11 @@ type MinHasher struct {
 }
 
 // New returns a MinHasher producing signatures of length k from the given
-// seed. Panics if k <= 0.
+// seed. Panics if k <= 0 or k > 65535 (the serialization format stores k
+// in 16 bits; practical k is a few hundred at most).
 func New(k int, seed uint64) *MinHasher {
-	if k <= 0 {
-		panic("minhash: k must be positive")
+	if k <= 0 || k > math.MaxUint16 {
+		panic("minhash: k must be in [1, 65535]")
 	}
 	rng := hashutil.SplitMix64(seed)
 	a := make([]uint64, k)

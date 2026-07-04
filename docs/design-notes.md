@@ -49,6 +49,44 @@ mirroring minhash's empty-set signature). Pinned by
 `simhash/testdata/golden.json` (regenerate via
 `go test ./simhash -run TestGoldenFingerprints -update`).
 
+## Frozen primitives (M4) — serialization
+
+Wire formats (both versioned, little-endian, pinned by hand-written golden
+bytes in `TestMarshalGoldenBytes`/`TestFingerprintGoldenBytes`):
+
+```
+signature:   [version:1][algo:1][k:2 LE][seed:8 LE][values: k × 8 LE]
+fingerprint: [version:1][algo:1][fp:8 LE]
+```
+
+**Algorithm-id registry** (shared byte-space across the module, so
+incompatible sketch families can never silently mix in storage):
+
+| id | family |
+|----|--------|
+| 1  | MinHash, k independent multiply-add permutations (v0) |
+| 2  | SimHash, 64-bit |
+
+Reserve new ids for post-v0 families (one-permutation hashing, b-bit
+compaction) instead of reusing these.
+
+The seed is stored raw (not digested): signatures are self-describing, and
+`minhash.DecodeSignature` + `New(len(sig), seed)` reconstructs a compatible
+hasher from stored bytes alone. Seeds are not secrets — nothing here is
+adversary-resistant regardless.
+
+**Deviation from spec:** the spec put `MarshalBinary`/`UnmarshalBinary` on
+`Signature` itself, but `Signature` is a bare `[]uint64` that does not know
+its seed, so a self-describing encode is impossible from the value alone.
+Marshal/unmarshal therefore live on `MinHasher` (`MarshalSignature`,
+`UnmarshalSignature` — which also verifies k/seed match, the check in-memory
+comparison can't do) plus package-level `DecodeSignature` for the
+hasher-less path. `Fingerprint` carries no parameters, so it implements the
+standard `encoding.BinaryMarshaler`/`BinaryAppender`/`BinaryUnmarshaler`
+directly.
+
+Consequence of the 16-bit k field: `minhash.New` now rejects k > 65535.
+
 ## M3 decisions
 
 **Banding bucket keys.** A band's bucket key is the Mix-fold of its row
