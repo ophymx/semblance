@@ -139,6 +139,35 @@ func Jaccard(a, b Signature) float64 {
 	return float64(eqCount(a, b)) / float64(len(a))
 }
 
+// JaccardMany estimates the Jaccard similarity of q against every
+// candidate — the batch form of [Jaccard], intended for verifying LSH
+// candidate lists. Each estimate is exactly what Jaccard(q, candidate)
+// returns, with the same error bound and the same undetectable-seed-
+// mismatch caveat. Results are written into dst, which must have length
+// len(candidates); pass nil to allocate (reusing dst across queries avoids
+// that allocation). Returns the filled dst.
+//
+// Panics if q is empty, if a non-nil dst's length differs from
+// len(candidates), or if any candidate's length differs from q's.
+func JaccardMany(dst []float64, q Signature, candidates []Signature) []float64 {
+	if len(q) == 0 {
+		panic("minhash: empty signature")
+	}
+	if dst == nil {
+		dst = make([]float64, len(candidates))
+	} else if len(dst) != len(candidates) {
+		panic("minhash: dst length does not match candidates")
+	}
+	k := float64(len(q))
+	for i, c := range candidates {
+		if len(c) != len(q) {
+			panic("minhash: signature length mismatch")
+		}
+		dst[i] = float64(eqCount(q, c)) / k
+	}
+	return dst
+}
+
 // eqCountGeneric counts positions where a and b match; the portable kernel
 // behind [Jaccard].
 func eqCountGeneric(a, b []uint64) int {

@@ -299,8 +299,11 @@ one document supplies unlimited independent work items:
   economics), which is now a minority of both pipelines.
 - **One-vs-many Jaccard** with candidate signatures stored slot-major
   (structure-of-arrays): each vpcmpeqq lane is a *candidate*, the direct
-  analog of minio's lane-is-a-stream. Needs a batch-verify API in lsh;
-  the most promising unexplored kernel for verification-heavy dedup.
+  analog of minio's lane-is-a-stream. `minhash.JaccardMany` now exists as
+  the API seam (AoS loop over the dispatched eqCount, ~115 ns/candidate at
+  k=128, zero allocs with a reused dst; bit-identical to Jaccard); the
+  slot-major kernel and a signature-storing QueryVerified index remain
+  gated on evidence of a verification-bound workload.
 
 ## Round 4: runtime AVX2 dispatch (reach)
 
