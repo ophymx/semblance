@@ -90,10 +90,21 @@ Consequence of the 16-bit k field: `minhash.New` now rejects k > 65535.
 ## M3 decisions
 
 **Banding bucket keys.** A band's bucket key is the Mix-fold of its row
-values. Keys live only in the in-memory store, so this is not
-signature-frozen — but if a KV-backed store lands (post-v0), persisted
-buckets freeze it; revisit then. Key collisions merely add false-positive
-candidates, which callers must verify anyway.
+values. Key collisions merely add false-positive candidates, which callers
+must verify anyway. As of the post-v0 `lsh.BandKeys` export, key
+derivation is **frozen and persistable** (pinned by `TestBandKeysGolden`):
+changing it breaks externally stored buckets and is a major-version event.
+
+**No pluggable store interface (post-v0 decision).** Considered and
+declined: a synchronous, error-less store interface is correct for the
+in-memory map and wrong for every real backend (error propagation would
+infect Add/Query signatures for all callers; per-band round-trips are
+catastrophic without batching, which needs a different interface shape).
+Instead, BYO-persistence gets primitives: serialized signatures,
+`BandKeys` for external bucket layouts (equivalence with `lsh.Index`
+proven in `TestExternalIndexEquivalence`), and `Range` for rebuild. The
+unexported bucketStore interface remains reserved for a future
+purpose-designed disk index, should one ever be warranted.
 
 **Query result order.** Both indexes return deduplicated ids in
 (first matching band/block, insertion) order — never map-iteration order,

@@ -67,6 +67,26 @@ candidates := ix.Query(sk.Sketch(query)) // verify candidates with minhash.Jacca
 - **Not** an NLP toolkit (no stemming, stopwords, language detection), not
   a search engine, nothing non-deterministic.
 
+## Bring your own persistence
+
+There is deliberately no pluggable storage interface: real backends need
+their own batching, error handling, and consistency model, which a
+synchronous store interface would dictate badly. Instead the library
+exposes the frozen primitives and you own the I/O:
+
+- **Signatures and fingerprints serialize** (`MinHasher.MarshalSignature`,
+  `Fingerprint.MarshalBinary`) — store them as blobs next to your
+  documents.
+- **`lsh.BandKeys`** computes the bucket keys an index would use, so an
+  LSH index over Redis (`SADD lsh:<band>:<key> id`), SQL, or any KV is
+  ~30 lines: write id under each key on add, union the buckets on query,
+  verify candidates with `minhash.JaccardMany`. See the `BandKeys`
+  example. Key derivation is frozen and safe to persist.
+- **In-memory indexes rebuild fast**: `Range` enumerates contents, and
+  re-`Add`ing a million stored signatures takes seconds, so a snapshot of
+  (id, signature) pairs is usually all the durability an `lsh.Index`
+  needs.
+
 ## References
 
 - A. Z. Broder. *On the resemblance and containment of documents.*

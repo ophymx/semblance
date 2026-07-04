@@ -120,6 +120,36 @@ func (ix *Index) Threshold() float64 {
 	return math.Pow(1/float64(ix.bands), 1/float64(ix.rows))
 }
 
+// BandKeys appends the bucket key of each of sig's bands to dst and
+// returns the extended slice (band i's key at position i; pass nil to
+// allocate). This is the banding math behind [Index], exported for
+// building an LSH index over your own storage — write id under each
+// (band, key) pair on add, union the buckets on query, and verify
+// candidates with [minhash.JaccardMany]. See the example.
+//
+// Key derivation is frozen: the same signature yields the same keys on
+// every platform and in every release within a major version, so keys may
+// be persisted. As with signatures, keys from different (k, seed, bands,
+// rows) configurations must not be mixed in one store.
+//
+// Panics if bands <= 0, rows <= 0, or len(sig) != bands*rows.
+func BandKeys(dst []uint64, sig minhash.Signature, bands, rows int) []uint64 {
+	if bands <= 0 || rows <= 0 {
+		panic("lsh: bands and rows must be positive")
+	}
+	if len(sig) != bands*rows {
+		panic("lsh: signature length does not match bands*rows")
+	}
+	for band := 0; band < bands; band++ {
+		acc := hashutil.MixInit
+		for _, v := range sig[band*rows : (band+1)*rows] {
+			acc = hashutil.Mix(acc, v)
+		}
+		dst = append(dst, acc)
+	}
+	return dst
+}
+
 // Add indexes id under the signature. Ids need not be unique: adding the
 // same id again (with the same or a different signature) is allowed, a
 // query matching it still returns it once, and [Index.Remove] removes all
@@ -127,9 +157,10 @@ func (ix *Index) Threshold() float64 {
 // Panics if len(sig) != bands*rows.
 func (ix *Index) Add(id string, sig minhash.Signature) {
 	ks := ix.keys[id]
-	for band, key := range ix.bandKeys(sig) {
+	start := len(ks)
+	ks = BandKeys(ks, sig, ix.bands, ix.rows)
+	for band, key := range ks[start:] {
 		ix.store.add(band, key, id)
-		ks = append(ks, key)
 	}
 	ix.keys[id] = ks
 }
@@ -173,9 +204,10 @@ func (ix *Index) Range() iter.Seq[string] {
 // insertion order). Candidates must be verified by the caller; a returned
 // id may have low true similarity. Returns nil if there are none.
 func (ix *Index) Query(sig minhash.Signature) []string {
+	keys := BandKeys(make([]uint64, 0, ix.bands), sig, ix.bands, ix.rows)
 	var out []string
 	seen := make(map[string]bool)
-	for band, key := range ix.bandKeys(sig) {
+	for band, key := range keys {
 		for _, id := range ix.store.get(band, key) {
 			if !seen[id] {
 				seen[id] = true
@@ -184,24 +216,4 @@ func (ix *Index) Query(sig minhash.Signature) []string {
 		}
 	}
 	return out
-}
-
-// bandKeys yields (band, bucket key) for each band of sig. The key is a
-// Mix-fold of the band's row values; key collisions only add false-positive
-// candidates, which queries must tolerate anyway.
-func (ix *Index) bandKeys(sig minhash.Signature) func(yield func(int, uint64) bool) {
-	if len(sig) != ix.bands*ix.rows {
-		panic("lsh: signature length does not match bands*rows")
-	}
-	return func(yield func(int, uint64) bool) {
-		for band := 0; band < ix.bands; band++ {
-			acc := hashutil.MixInit
-			for _, v := range sig[band*ix.rows : (band+1)*ix.rows] {
-				acc = hashutil.Mix(acc, v)
-			}
-			if !yield(band, acc) {
-				return
-			}
-		}
-	}
 }
