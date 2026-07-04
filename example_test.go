@@ -2,6 +2,8 @@ package semblance_test
 
 import (
 	"fmt"
+	"io"
+	"strings"
 
 	semblance "github.com/ophymx/semblance"
 )
@@ -25,4 +27,17 @@ func ExampleSketcher() {
 	candidates := ix.Query(sk.Sketch("the quick brown fox jumps over the lazy dog every single evening"))
 	fmt.Println(candidates)
 	// Output: [doc1]
+}
+
+// Documents too large to hold in memory stream through an io.Writer; any
+// chunking produces the same signature as sketching the whole text.
+func ExampleSketcher_NewStream() {
+	sk := semblance.NewSketcher(semblance.Defaults())
+
+	text := "the quick brown fox jumps over the lazy dog"
+	st := sk.NewStream()
+	io.Copy(st, strings.NewReader(text)) // e.g. an os.File in practice
+
+	fmt.Println(semblance.NewSketcher(semblance.Defaults()).Sketch(text)[0] == st.Signature()[0])
+	// Output: true
 }

@@ -123,6 +123,17 @@ mutated; callers must not mutate the slice until iteration completes.
 Single implementation means golden behavior is shared by construction;
 equivalence is fuzz-verified.
 
+**Streaming (post-v0).** `shingle.WordScanner` and `semblance.Stream`
+sketch chunked input with chunking-independence guaranteed: chunks are cut
+into segments at *definite* token boundaries — ASCII non-alphanumeric
+bytes, which can never occur inside a token or a multi-byte UTF-8 rune —
+and the boundary-free tail is carried to the next Write. Each complete
+segment reuses the ordinary tokenHashes scan, so partial runes and
+tokens spanning chunks need no special handling; equivalence with Words
+over arbitrary splits is fuzz-verified. The carry buffer grows with the
+longest boundary-free span (documented). Steady-state Write is
+zero-alloc.
+
 **Root package.** `Similarity` detects the degenerate case via the
 empty-set signature (all MaxUint64) rather than counting tokens — no second
 pass over the text. A non-empty document producing that signature would
