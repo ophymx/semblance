@@ -269,3 +269,35 @@ Findings:
 4. Caveat: with every core busy, per-core dynamic clocks drop on both
    machines; single-thread × core-count over-predicts by ~10–20%. Size
    fleets from the saturated numbers, not the single-thread ones.
+
+## The minio multi-buffer/server pattern, considered
+
+`minio/md5-simd` (and `minio/sha256-simd`'s AVX-512 path) run N
+*independent* hash streams in the N lanes of wide vector registers, with a
+server goroutine that collects blocks from concurrent `hash.Hash` clients
+and transposes them into lane-major buffers. That design is a workaround
+for **intra-stream serialism**: MD5/SHA block N depends on block N−1, so
+one stream cannot be vectorized at all (and MD5 has no hardware
+instructions to fall back on). The costs are batching latency, per-block
+channel synchronization, and lane stalls when fewer than N streams are
+active. (sha256-simd's plain-AVX2 path is single-stream, and SHA-NI has
+largely superseded it — the server pattern is really md5-simd's.)
+
+semblance does not need it: our hot loops are data-parallel *within one
+document* (128 independent permutations; 64 independent bit-planes), so
+the kernels fill their lanes from a single stream, and round 3 shows
+goroutine-per-document saturates all cores with zero coordination. A
+sketch server would add md5-simd's synchronization for a lane-occupancy
+problem we don't have.
+
+Two scaled-down descendants of the idea do apply, both serverless because
+one document supplies unlimited independent work items:
+
+- **Lane-parallel xxhash** over 4 shingle windows/tokens per AVX2 op —
+  multi-buffer with a free batch supply. Ceiling ~2× on the hashing share
+  (64-bit lanes, synthesized multiplies — half minio's 32-bit lane
+  economics), which is now a minority of both pipelines.
+- **One-vs-many Jaccard** with candidate signatures stored slot-major
+  (structure-of-arrays): each vpcmpeqq lane is a *candidate*, the direct
+  analog of minio's lane-is-a-stream. Needs a batch-verify API in lsh;
+  the most promising unexplored kernel for verification-heavy dedup.
