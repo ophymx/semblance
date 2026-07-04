@@ -49,6 +49,32 @@ mirroring minhash's empty-set signature). Pinned by
 `simhash/testdata/golden.json` (regenerate via
 `go test ./simhash -run TestGoldenFingerprints -update`).
 
+## M3 decisions
+
+**Banding bucket keys.** A band's bucket key is the Mix-fold of its row
+values. Keys live only in the in-memory store, so this is not
+signature-frozen — but if a KV-backed store lands (post-v0), persisted
+buckets freeze it; revisit then. Key collisions merely add false-positive
+candidates, which callers must verify anyway.
+
+**Query result order.** Both indexes return deduplicated ids in
+(first matching band/block, insertion) order — never map-iteration order,
+per determinism principle. Buckets are append-only slices.
+
+**Hamming index.** Block-permutation variant of Manku et al.: maxDist+1
+near-equal blocks (d=3 → 4×16 bits; d=2 → 22/21/21; d=1 → 2×32), pigeonhole
+guarantees a full-block match within distance d, exact-match table per
+block, hits verified against the stored fingerprint. So Query is exact
+(no false positives or negatives), unlike the banding index's candidates.
+Cost: d+1 table entries per Add.
+
+**Root package.** `Similarity` detects the degenerate case via the
+empty-set signature (all MaxUint64) rather than counting tokens — no second
+pass over the text. A non-empty document producing that signature would
+require a permuted hash of MaxUint64 in all k slots (probability ~2^-64k).
+`Config.Bands/Rows` may be left zero when no index is needed; validation of
+Bands×Rows==K happens in NewSketcher when set, and NewIndex panics if unset.
+
 ## Measured constants (M1, go1.26)
 
 Sketch pipelines (`SketchInto` + `Char`/`Words` iterator) run at exactly
