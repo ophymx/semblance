@@ -39,6 +39,7 @@ frozen defaults (word shingles of width 3, 128-value signatures, seed 0,
 | `simhash` | Weighted features → 64-bit `Fingerprint`; Hamming `Distance` tracks cosine similarity |
 | `lsh`     | `Index` (MinHash banding: sub-linear candidate retrieval above a similarity threshold) and `HammingIndex` (all stored fingerprints within distance ≤ 3, exact) |
 | `winnow`  | Position-aware winnowing fingerprints (the MOSS algorithm): locate *where* documents overlap; any shared run of w+k−1 bytes is guaranteed a match |
+| `cluster` | Deterministic union-find for grouping verified near-duplicate pairs into clusters, earliest-member-wins representatives |
 
 Reusable, configurable pipeline:
 
