@@ -35,7 +35,7 @@ frozen defaults (word shingles of width 3, 128-value signatures, seed 0,
 | Package   | What it gives you |
 |-----------|-------------------|
 | `shingle` | Text → stream of shingle hashes (`iter.Seq[uint64]`): character k-grams (`Char`, `CharRunes`) or word w-grams (`Words`), hashed incrementally with zero per-shingle allocations |
-| `minhash` | Shingle stream → fixed-size `Signature`; `Jaccard` estimates set similarity with standard error ≈ 1/(2√k); asymmetric `Containment` ("how much of A is in B") and `Cardinality` come free from the same signatures; mergeable (`Union`) |
+| `minhash` | Shingle stream → fixed-size `Signature`; `Jaccard` estimates set similarity with standard error ≈ 1/(2√k); asymmetric `Containment` ("how much of A is in B"), `Cardinality`, and `IntersectionCardinality` come free from the same signatures; mergeable (`Union`) |
 | `simhash` | Weighted features → 64-bit `Fingerprint`; Hamming `Distance` tracks cosine similarity |
 | `lsh`     | `Index` (MinHash banding: candidates above a similarity threshold), `Forest` (top-k most-similar retrieval, no threshold), and `HammingIndex` (all stored fingerprints within distance ≤ 3, exact) |
 | `winnow`  | Position-aware winnowing fingerprints (the MOSS algorithm): locate *where* documents overlap; any shared run of w+k−1 bytes is guaranteed a match |

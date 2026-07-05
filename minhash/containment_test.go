@@ -105,3 +105,51 @@ func TestCardinalityPanics(t *testing.T) {
 	}()
 	minhash.Cardinality(minhash.Signature{})
 }
+
+// TestIntersectionCardinality checks the estimate against known
+// intersection sizes, with a tolerance derived from the estimator's error
+// model (Jaccard and cardinality contributions, 3 standard errors).
+func TestIntersectionCardinality(t *testing.T) {
+	const k = 256
+	m := minhash.New(k, 0)
+	cases := []struct{ sizeA, sizeB, shared int }{
+		{1000, 1000, 0},
+		{1000, 1000, 250},
+		{1000, 1000, 500},
+		{1000, 1000, 1000},
+		{500, 2000, 400},
+	}
+	for _, tc := range cases {
+		for _, seed := range []uint64{0, 1} {
+			rng := hashutil.SplitMix64(uint64(tc.sizeA+tc.sizeB+tc.shared)*5 + seed)
+			all := randSet(&rng, tc.sizeA+tc.sizeB-tc.shared)
+			setA := all[:tc.sizeA]
+			setB := append([]uint64{}, all[:tc.shared]...)
+			setB = append(setB, all[tc.sizeA:]...)
+
+			got := minhash.IntersectionCardinality(m.Sketch(seq(setA)), m.Sketch(seq(setB)))
+			union := float64(tc.sizeA + tc.sizeB - tc.shared)
+			trueJ := float64(tc.shared) / union
+			sum := float64(tc.sizeA + tc.sizeB)
+			sigma := sum/(1+trueJ)/(1+trueJ)*math.Sqrt(trueJ*(1-trueJ)/k) +
+				trueJ/(1+trueJ)*sum/math.Sqrt(k)
+			tol := 3*sigma + 10 // floor for the disjoint case
+			if math.Abs(got-float64(tc.shared)) > tol {
+				t.Errorf("|A|=%d |B|=%d shared=%d seed=%d: estimate %.0f outside ±%.0f",
+					tc.sizeA, tc.sizeB, tc.shared, seed, got, tol)
+			}
+		}
+	}
+
+	// Edges: empty signatures estimate no intersection.
+	empty := m.Sketch(seq(nil))
+	sig := m.Sketch(seq(randSetSimple(99, 300)))
+	if got := minhash.IntersectionCardinality(empty, sig); got != 0 {
+		t.Errorf("IntersectionCardinality(empty, x) = %v, want 0", got)
+	}
+}
+
+func randSetSimple(seed uint64, n int) []uint64 {
+	rng := hashutil.SplitMix64(seed)
+	return randSet(&rng, n)
+}

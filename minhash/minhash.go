@@ -210,6 +210,17 @@ func Cardinality(sig Signature) float64 {
 	return float64(len(sig))/sum - 1
 }
 
+// IntersectionCardinality estimates |A∩B|, the number of distinct
+// elements the two sketched sets share: J/(1+J)·(|A|+|B|), combining the
+// [Jaccard] estimate with [Cardinality] estimates of both sets. Absolute
+// error scales with the union size — roughly (|A|+|B|)/sqrt(k) — so treat
+// small intersections of large sets as coarse signals. Panics as
+// [Jaccard] does on length mismatch or empty signatures.
+func IntersectionCardinality(a, b Signature) float64 {
+	j := Jaccard(a, b)
+	return j / (1 + j) * (Cardinality(a) + Cardinality(b))
+}
+
 // Containment estimates the fraction of a's elements that are also in b —
 // the asymmetric measure c(A,B) = |A∩B| / |A| (Broder's containment).
 // Unlike [Jaccard] it is meaningful when the sets differ greatly in size:
@@ -226,11 +237,10 @@ func Cardinality(sig Signature) float64 {
 // Returns 0 when a estimates as empty; the result is clamped to [0, 1].
 // Panics as [Jaccard] does on length mismatch or empty signatures.
 func Containment(a, b Signature) float64 {
-	j := Jaccard(a, b)
-	na, nb := Cardinality(a), Cardinality(b)
+	na := Cardinality(a)
 	if na <= 0 {
 		return 0
 	}
-	c := j * (na + nb) / ((1 + j) * na)
+	c := IntersectionCardinality(a, b) / na
 	return min(max(c, 0), 1)
 }
