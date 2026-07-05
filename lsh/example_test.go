@@ -69,3 +69,38 @@ var (
 	}
 	docSigs = map[string]minhash.Signature{}
 )
+
+// A Forest answers "the k most similar", whatever their similarity — the
+// retrieval shape for context lookup. Re-rank the candidates with
+// JaccardMany when true order matters.
+func ExampleForest() {
+	m := minhash.New(128, 0)
+	sk := func(text string) minhash.Signature {
+		return m.Sketch(shingle.Words(text, 3))
+	}
+
+	f := lsh.NewForest(8, 16)
+	corpus := map[string]string{
+		"near": "the city council voted last night to approve the new marina expansion project",
+		"mid":  "the city council voted last night against the harbor dredging proposal instead",
+		"far":  "our gardening column returns with tips on pruning roses in late summer heat",
+	}
+	sigs := map[string]minhash.Signature{}
+	for id, text := range corpus {
+		sigs[id] = sk(text)
+		f.Add(id, sigs[id])
+	}
+
+	q := sk("BREAKING: the city council voted last night to approve the new marina expansion project!")
+	ids := f.Query(q, 2)
+	cands := make([]minhash.Signature, len(ids))
+	for i, id := range ids {
+		cands[i] = sigs[id]
+	}
+	for i, est := range minhash.JaccardMany(nil, q, cands) {
+		fmt.Printf("%s: %.2f\n", ids[i], est)
+	}
+	// Output:
+	// near: 0.90
+	// mid: 0.18
+}

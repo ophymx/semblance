@@ -37,7 +37,7 @@ frozen defaults (word shingles of width 3, 128-value signatures, seed 0,
 | `shingle` | Text → stream of shingle hashes (`iter.Seq[uint64]`): character k-grams (`Char`, `CharRunes`) or word w-grams (`Words`), hashed incrementally with zero per-shingle allocations |
 | `minhash` | Shingle stream → fixed-size `Signature`; `Jaccard` estimates set similarity with standard error ≈ 1/(2√k); asymmetric `Containment` ("how much of A is in B") and `Cardinality` come free from the same signatures; mergeable (`Union`) |
 | `simhash` | Weighted features → 64-bit `Fingerprint`; Hamming `Distance` tracks cosine similarity |
-| `lsh`     | `Index` (MinHash banding: sub-linear candidate retrieval above a similarity threshold) and `HammingIndex` (all stored fingerprints within distance ≤ 3, exact) |
+| `lsh`     | `Index` (MinHash banding: candidates above a similarity threshold), `Forest` (top-k most-similar retrieval, no threshold), and `HammingIndex` (all stored fingerprints within distance ≤ 3, exact) |
 | `winnow`  | Position-aware winnowing fingerprints (the MOSS algorithm): locate *where* documents overlap; any shared run of w+k−1 bytes is guaranteed a match |
 | `cluster` | Deterministic union-find for grouping verified near-duplicate pairs into clusters, earliest-member-wins representatives |
 | `hll`     | HyperLogLog cardinality sketches: distinct-element counts with ~1.04/√2ᵖ error, mergeable and serializable; feed it shingle streams to count distinct words or shingles |
@@ -98,6 +98,8 @@ exposes the frozen primitives and you own the I/O:
   STOC 2002.
 - S. Schleimer, D. Wilkerson, A. Aiken. *Winnowing: local algorithms for
   document fingerprinting.* SIGMOD 2003.
+- M. Bawa, T. Condie, P. Ganesan. *LSH Forest: self-tuning indexes for
+  similarity search.* WWW 2005.
 - G. S. Manku, A. Jain, A. Das Sarma. *Detecting near-duplicates for web
   crawling.* WWW 2007.
 - P. Flajolet, É. Fusy, O. Gandouet, F. Meunier. *HyperLogLog: the analysis

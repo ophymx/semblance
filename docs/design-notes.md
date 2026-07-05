@@ -136,6 +136,15 @@ is frozen (golden test); implementation verified against a naive
 every-window oracle including tie-heavy inputs, and the guarantee is
 fuzz-tested.
 
+**LSH Forest (post-v0).** Top-k retrieval per Bawa et al., datasketch-
+style: trees disjoint signature slices, prefix levels are whole 64-bit
+minhash values, queries descend from the deepest shared prefix. Lazy
+sort-on-query (dirty flag) instead of datasketch's explicit index() call,
+so bulk loads are one sort. Candidate order is deterministic — descending
+maximum prefix depth, then tree/key/insertion order — and verified against
+a brute-force depth oracle. Results are similarity-proxy-ordered
+candidates; callers re-rank with JaccardMany.
+
 **Index lifecycle (post-v0).** Both indexes support Remove/Len/Range.
 `Index` tracks per-id bucket keys (bands×8 bytes per Add) so Remove can
 find its entries without storing signatures; consequently `Index.Range`
