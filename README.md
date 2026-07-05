@@ -42,6 +42,7 @@ frozen defaults (word shingles of width 3, 128-value signatures, seed 0,
 | `cluster` | Deterministic union-find for grouping verified near-duplicate pairs into clusters, earliest-member-wins representatives |
 | `hll`     | HyperLogLog cardinality sketches: distinct-element counts with ~1.04/√2ᵖ error, mergeable and serializable; feed it shingle streams to count distinct words or shingles |
 | `topk`    | SpaceSaving frequent-items sketch (generic over item type): the heaviest items of a stream in fixed space with per-item error bounds — flood and burst detection |
+| `sample`  | Deterministic reservoir sampling: k uniform representatives from a stream of unknown length, reproducible by seed |
 
 Reusable, configurable pipeline:
 
