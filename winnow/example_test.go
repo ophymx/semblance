@@ -34,3 +34,27 @@ func Example() {
 	// Output:
 	// shared passage in a: "e council voted 7-2 to approve the marina expansion"
 }
+
+// Index gives fragment-level provenance: which indexed documents a suspect
+// overlaps, and where. Here a "new" article is caught reusing a passage
+// from an earlier one, with the borrowed span localized in both.
+func ExampleIndex() {
+	const k, w = 8, 6
+	ix := winnow.NewIndex(k, w)
+	ix.Add("wire-story", "City council approves the marina expansion project after a seven to two vote late Tuesday.")
+	ix.Add("gardening", "This week in the garden: pruning roses and preparing beds for the coming autumn frost.")
+
+	suspect := "BREAKING (via tipster): approves the marina expansion project after a seven to two vote — developing."
+
+	// Which document does it overlap most?
+	top := ix.Overlap(suspect)[0]
+	fmt.Printf("overlaps %q on %d fingerprints\n", top.ID, top.Shared)
+
+	// Localize the borrowed span within the suspect via the match run.
+	m := ix.Matches(suspect)
+	lo, hi := m[0].QueryPos, m[len(m)-1].QueryPos+k
+	fmt.Printf("borrowed: %q\n", suspect[lo:hi])
+	// Output:
+	// overlaps "wire-story" on 14 fingerprints
+	// borrowed: " approves the marina expansion project after a seven to two vo"
+}

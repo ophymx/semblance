@@ -136,6 +136,16 @@ is frozen (golden test); implementation verified against a naive
 every-window oracle including tie-heavy inputs, and the guarantee is
 fuzz-tested.
 
+**winnow.Index (post-v0).** An inverted index fingerprint-hash -> (id, pos)
+giving fragment-level provenance: Overlap ranks documents by shared
+fingerprint count, Matches returns (queryPos, docPos) pairs whose constant
+diagonal localizes a shared passage. This is the position-carrying index
+lsh.Index cannot be — it earns the same lifecycle treatment (Remove/Len/
+Range, per-id hash lists ~doubling memory, like lsh.Index's per-id keys)
+because position provenance is a distinct capability, not application glue.
+Overlap tested against a brute-force fingerprint-set-intersection oracle;
+Matches verified to point at byte-equal k-grams on a constant offset.
+
 **LSH Forest (post-v0).** Top-k retrieval per Bawa et al., datasketch-
 style: trees disjoint signature slices, prefix levels are whole 64-bit
 minhash values, queries descend from the deepest shared prefix. Lazy
