@@ -115,7 +115,10 @@ func NewIndex(bands, rows int) *Index {
 }
 
 // Threshold returns the approximate Jaccard similarity at which the
-// candidate probability crosses 1/2: (1/bands)^(1/rows).
+// candidate probability crosses 1/2: (1/bands)^(1/rows). Verifying
+// candidates against a cutoff below this value silently misses pairs the
+// banding never surfaces; use [Params] to shape an index for the threshold
+// you intend to use.
 func (ix *Index) Threshold() float64 {
 	return math.Pow(1/float64(ix.bands), 1/float64(ix.rows))
 }

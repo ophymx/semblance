@@ -200,6 +200,18 @@ old bucket entries first (recompute-from-old-sig) so no stale entries
 survive. Equivalence with Index proven: `Query(sig, 0)` returns exactly
 `Index.Query`'s candidate set, scored.
 
+**Params helper (post-v0).** The semblance-bleve example also exposed a
+quiet correctness trap: the LSH banding threshold and the similarity cutoff
+you verify at are coupled in meaning but decoupled in API — verifying below
+`Threshold()` silently loses recall (the banding never surfaces those
+candidates). `lsh.Params(k, target)` picks the `(bands, rows)` with
+bands*rows==k whose threshold is closest to target, so an index can be
+built to match the threshold it will be queried at. Both `Threshold` docs
+now point at it. k's factors bound the achievable thresholds (hence the
+default k=128, a power of two, has fine control); ties resolve toward more
+bands (higher recall). Verified against a brute-force closest-factor-pair
+oracle.
+
 **Index lifecycle (post-v0).** Both indexes support Remove/Len/Range.
 `Index` tracks per-id bucket keys (bands×8 bytes per Add) so Remove can
 find its entries without storing signatures; consequently `Index.Range`

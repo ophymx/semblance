@@ -52,7 +52,8 @@ func NewVerifiedIndex(bands, rows int) *VerifiedIndex {
 // candidate probability crosses 1/2: (1/bands)^(1/rows). A minJaccard
 // passed to [VerifiedIndex.Query] below this value will silently miss
 // pairs the banding never surfaces as candidates — keep the query
-// threshold at or above it.
+// threshold at or above it, or build the index with [Params] for the
+// threshold you intend to query at.
 func (vi *VerifiedIndex) Threshold() float64 {
 	return (&Index{bands: vi.bands, rows: vi.rows}).Threshold()
 }
