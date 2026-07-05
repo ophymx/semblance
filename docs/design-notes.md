@@ -145,6 +145,17 @@ maximum prefix depth, then tree/key/insertion order — and verified against
 a brute-force depth oracle. Results are similarity-proxy-ordered
 candidates; callers re-rank with JaccardMany.
 
+**topk / SpaceSaving (post-v0).** Generic over comparable item types —
+flood signatures must report what the item is, so the sketch stores items
+rather than hashes; consequently there is no generic serialization
+(persist Top output). Two documented departures from module norms:
+results depend on stream order (inherent to SpaceSaving; the heavy-hitter
+guarantees hold for any order, and identical streams are deterministic
+via (count, adoption-seq) heap tie-breaking), and Merge is the
+conservative mergeable variant — items absent from one sketch are charged
+that sketch's minimum counter as both count and error, preserving upper
+and lower bounds at the cost of looser Err after merging.
+
 **Index lifecycle (post-v0).** Both indexes support Remove/Len/Range.
 `Index` tracks per-id bucket keys (bands×8 bytes per Add) so Remove can
 find its entries without storing signatures; consequently `Index.Range`
