@@ -145,12 +145,25 @@ func (s *Sketcher) Containment(a, b string) float64 {
 
 // NewIndex returns an empty LSH candidate index shaped by the
 // configuration's Bands and Rows, for signatures produced by this Sketcher.
-// Panics if Bands/Rows were left zero.
+// Query returns unverified candidate ids; the caller verifies them. Panics
+// if Bands/Rows were left zero.
 func (s *Sketcher) NewIndex() *lsh.Index {
 	if s.cfg.Bands == 0 {
 		panic("semblance: Config.Bands/Rows not set")
 	}
 	return lsh.NewIndex(s.cfg.Bands, s.cfg.Rows)
+}
+
+// NewVerifiedIndex returns an empty signature-storing LSH index shaped by
+// the configuration's Bands and Rows. Its Query returns verified, ranked
+// neighbors directly (see [lsh.VerifiedIndex]) — the convenient path for
+// near-duplicate lookup, at the cost of retaining signatures. Panics if
+// Bands/Rows were left zero.
+func (s *Sketcher) NewVerifiedIndex() *lsh.VerifiedIndex {
+	if s.cfg.Bands == 0 {
+		panic("semblance: Config.Bands/Rows not set")
+	}
+	return lsh.NewVerifiedIndex(s.cfg.Bands, s.cfg.Rows)
 }
 
 // Similarity estimates the Jaccard similarity of the two texts' word

@@ -104,3 +104,23 @@ func ExampleForest() {
 	// near: 0.90
 	// mid: 0.18
 }
+
+// A VerifiedIndex answers "which indexed documents are near-duplicates of
+// this one, and how similar" in a single call — no caller-side signature
+// store, no separate verification. This is the dedup-gate pattern.
+func ExampleVerifiedIndex() {
+	m := minhash.New(128, 0)
+	sk := func(text string) minhash.Signature { return m.Sketch(shingle.Words(text, 3)) }
+
+	vi := lsh.NewVerifiedIndex(16, 8)
+	vi.Add("orig", sk("the city council approved the marina expansion project last night"))
+	vi.Add("unrelated", sk("local gardeners share tips for pruning roses before the winter frost"))
+
+	// A repost arrives; is it a near-duplicate of anything already seen?
+	repost := sk("FWD: the city council approved the marina expansion project last night")
+	for _, n := range vi.Query(repost, 0.7) {
+		fmt.Printf("%s: %.2f\n", n.ID, n.Similarity)
+	}
+	// Output:
+	// orig: 0.88
+}

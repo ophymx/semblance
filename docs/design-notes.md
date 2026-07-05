@@ -185,6 +185,21 @@ conservative mergeable variant — items absent from one sketch are charged
 that sketch's minimum counter as both count and error, preserving upper
 and lower bounds at the cost of looser Err after merging.
 
+**VerifiedIndex (post-v0).** `Index.Query` returns unverified candidate
+ids, which the dedup/near-dup workflow must then verify against stored
+signatures — and the semblance-bleve example showed every caller writes
+the same parallel `map[string]Signature` + `JaccardMany` + index-remap
+boilerplate. `VerifiedIndex` owns the signature store (k*8 bytes/doc) and
+`Query(sig, minJaccard)` returns ranked `[]Neighbor{ID, Similarity}`
+directly. Because it stores the full signature it needs no per-id band-key
+list (Remove recomputes keys via `BandKeys` from the stored sig), so it is
+leaner than Index for the same-plus-verification job. Two correctness
+details baked in and tested: `Add` clones sig (callers reuse SketchInto
+buffers; retaining the slice would alias), and re-adding an id drops its
+old bucket entries first (recompute-from-old-sig) so no stale entries
+survive. Equivalence with Index proven: `Query(sig, 0)` returns exactly
+`Index.Query`'s candidate set, scored.
+
 **Index lifecycle (post-v0).** Both indexes support Remove/Len/Range.
 `Index` tracks per-id bucket keys (bands×8 bytes per Add) so Remove can
 find its entries without storing signatures; consequently `Index.Range`

@@ -37,7 +37,7 @@ frozen defaults (word shingles of width 3, 128-value signatures, seed 0,
 | `shingle` | Text → stream of shingle hashes (`iter.Seq[uint64]`): character k-grams (`Char`, `CharRunes`) or word w-grams (`Words`), hashed incrementally with zero per-shingle allocations |
 | `minhash` | Shingle stream → fixed-size `Signature`; `Jaccard` estimates set similarity with standard error ≈ 1/(2√k); asymmetric `Containment` ("how much of A is in B"), `Cardinality`, and `IntersectionCardinality` come free from the same signatures; mergeable (`Union`) |
 | `simhash` | Weighted features → 64-bit `Fingerprint`; Hamming `Distance` tracks cosine similarity |
-| `lsh`     | `Index` (MinHash banding: candidates above a similarity threshold), `Forest` (top-k most-similar retrieval, no threshold), and `HammingIndex` (all stored fingerprints within distance ≤ 3, exact) |
+| `lsh`     | `Index` (banding: unverified candidate ids), `VerifiedIndex` (banding + stored signatures: verified, ranked near-duplicates in one call), `Forest` (top-k most-similar retrieval), and `HammingIndex` (SimHash within distance ≤ 3, exact) |
 | `winnow`  | Position-aware winnowing fingerprints (the MOSS algorithm): locate *where* documents overlap; any shared run of w+k−1 bytes is guaranteed a match. `Index` gives corpus-scale fragment provenance — which documents a text overlaps and exactly where |
 | `cluster` | Deterministic union-find for grouping verified near-duplicate pairs into clusters, earliest-member-wins representatives |
 | `hll`     | HyperLogLog cardinality sketches: distinct-element counts with ~1.04/√2ᵖ error, mergeable and serializable; feed it shingle streams to count distinct words or shingles |
