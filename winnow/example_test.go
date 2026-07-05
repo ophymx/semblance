@@ -58,3 +58,20 @@ func ExampleIndex() {
 	// overlaps "wire-story" on 14 fingerprints
 	// borrowed: " approves the marina expansion project after a seven to two vo"
 }
+
+// Overlaps compares two known documents directly, without an index —
+// here localizing the passage a paraphrase borrowed verbatim.
+func ExampleOverlaps() {
+	a := "the quarterly report shows that revenue climbed twelve percent across every region"
+	b := "as we noted last week, revenue climbed twelve percent across every region this year"
+
+	shared := winnow.Overlaps(a, b, 8, 6)
+	lo, hi := shared[0].PosB, shared[0].PosB+8
+	for _, s := range shared {
+		lo = min(lo, s.PosB)
+		hi = max(hi, s.PosB+8)
+	}
+	fmt.Printf("%q\n", b[lo:hi])
+	// Output:
+	// "venue climbed twelve percent across every r"
+}
