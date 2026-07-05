@@ -9,16 +9,22 @@
 // # Determinism
 //
 // For a given input and parameters, every function in this package produces
-// the same hash stream on every platform and in every process. One caveat:
-// [Words] classifies and lowercases runes using the stdlib unicode tables,
-// which track the Unicode version shipped with the Go toolchain, so its
-// output is guaranteed stable per Unicode version. Pure-ASCII text is
-// unconditionally stable. [Char] and [CharRunes] do not consult the unicode
-// tables and are unconditionally stable.
+// the same hash stream on every platform, in every process, and across Go
+// toolchain versions. [Words] classifies and lowercases runes using a
+// frozen Unicode table committed in this package (see unicodetables.go),
+// not the Go toolchain's unicode package, so its output does not shift when
+// the toolchain adopts a newer Unicode version. The frozen version is
+// [UnicodeVersion]; regenerating it (go generate) is a deliberate,
+// signature-affecting change. [Char] and [CharRunes] operate on bytes/runes
+// directly and never consult Unicode tables.
 package shingle
 
+//go:generate go run gentables.go
+
 import (
+	"cmp"
 	"iter"
+	"slices"
 	"unicode"
 	"unicode/utf8"
 	"unsafe"
@@ -268,6 +274,10 @@ func isLowerASCIIToken(c byte) bool {
 	return 'a' <= c && c <= 'z' || '0' <= c && c <= '9'
 }
 
+// lowerEntry is one simple-lowercase mapping in the frozen lowerRunes
+// table (see unicodetables.go): rune upper lowercases to lower.
+type lowerEntry struct{ upper, lower rune }
+
 func isTokenRune(r rune) bool {
 	switch {
 	case 'a' <= r && r <= 'z' || 'A' <= r && r <= 'Z' || '0' <= r && r <= '9':
@@ -275,7 +285,9 @@ func isTokenRune(r rune) bool {
 	case r < utf8.RuneSelf:
 		return false
 	}
-	return unicode.IsLetter(r) || unicode.IsNumber(r)
+	// Non-ASCII classification uses the frozen table, not the toolchain's
+	// unicode tables, so tokenization is deterministic across Go versions.
+	return unicode.Is(tokenRunes, r)
 }
 
 func appendLowerRune(buf []byte, r rune) []byte {
@@ -285,5 +297,16 @@ func appendLowerRune(buf []byte, r rune) []byte {
 		}
 		return append(buf, byte(r))
 	}
-	return utf8.AppendRune(buf, unicode.ToLower(r))
+	return utf8.AppendRune(buf, lowerRune(r))
+}
+
+// lowerRune returns the frozen simple-lowercase form of r (r >= 0x80),
+// or r itself if it does not change.
+func lowerRune(r rune) rune {
+	if i, ok := slices.BinarySearchFunc(lowerRunes, r, func(e lowerEntry, r rune) int {
+		return cmp.Compare(e.upper, r)
+	}); ok {
+		return lowerRunes[i].lower
+	}
+	return r
 }

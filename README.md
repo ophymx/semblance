@@ -56,10 +56,11 @@ candidates := ix.Query(sk.Sketch(query)) // verify candidates with minhash.Jacca
 ## Design
 
 - **Deterministic.** Same input + parameters + seed → same signature, on
-  every platform, in every process. Signatures are made to be stored and
-  compared later, elsewhere. (Word tokenization uses the Go toolchain's
-  Unicode tables, so it is stable per Unicode version; ASCII is
-  unconditionally stable — see the `shingle` docs.)
+  every platform, in every process, and across Go toolchain versions.
+  Signatures are made to be stored and compared later, elsewhere. Word
+  tokenization uses a Unicode table frozen in the `shingle` package
+  (`shingle.UnicodeVersion`), not the toolchain's, so it does not shift on
+  a compiler upgrade.
 - **Fast.** Hot paths do zero allocations per shingle and O(1) small
   allocations per document, asserted in tests.
 - **Heuristic, not exact.** Everything is an estimator with documented
