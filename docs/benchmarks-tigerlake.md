@@ -92,6 +92,43 @@ scalar `pospopcnt` reads higher) because per-core turbo state shifts between
 runs on this mobile part. Trust the scaling factor (same-harness ratio),
 not cross-section absolute equality.
 
+## Winnow (fragment provenance)
+
+Winnowing is position-aware fingerprinting, a different workload from the
+minhash/simhash sketchers: throughput is bound by the windowed-minimum
+selection and per-fingerprint yield, not by hashing (the k=8 scan feeds off
+`charHash8` at 1.6 GB/s, but `Text` runs at ~78 MB/s — the selection loop
+dominates). Documents are high-entropy synthetic text (see `genDoc`); the
+overlap benchmarks plant a shared passage in otherwise-distinct docs.
+
+| Operation | size | time/op | throughput |
+|---|---|---|---|
+| `Text` scan | 1 KB | 8.8 µs | 117 MB/s |
+| `Text` scan | 100 KB | 1.31 ms | 78.5 MB/s |
+| `Overlaps` (spans) | 2×100 KB, 4 KB shared | 6.23 ms | 32.9 MB/s ⁴ |
+| `Index.Add` | 100 KB | 5.28 ms | 19.4 MB/s ⁵ |
+| `Index.Overlap` (score) | 2 KB query / 100 docs | 1.22 ms | ⁶ |
+| `Index.Matches` (spans) | 2 KB query / 100 docs | 0.34 ms | ⁶ |
+
+⁴ Both documents are scanned, so throughput is over the summed 200 KB.
+⁵ Indexing is ~4× the raw scan: posting-list appends dominate (≈29.5 k
+allocs/doc growing the per-hash buckets and the id→hashes map). ⁶ Query
+"throughput" in MB/s is per-query-byte and understates the work (the query
+is matched against all 100 documents), so these are reported as time/op;
+`Overlap` is heavier than `Matches` here because its per-distinct-hash dedup
+maps allocate more than the offset-grouping.
+
+Saturated scaling (`-cpu=1` → `-cpu=16`):
+
+| Benchmark | 1 thread | 16 threads | scaling |
+|---|---|---|---|
+| `Text` scan | 76 MB/s | **596** | 7.8× |
+| `Index.Overlap` query | 2.0 MB/s | 10.8 | 5.4× |
+
+The pure `Text` scan scales near-ideally (7.8× — CPU-bound, no shared
+mutable state); the index query scales less (5.4×) as concurrent map reads
+and per-query allocation pressure GC.
+
 ## Cross-machine comparison
 
 The AVX2-only dev box and M1 Pro numbers live in `simd-analysis.md`
