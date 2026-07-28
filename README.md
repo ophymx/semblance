@@ -93,6 +93,45 @@ exposes the frozen primitives and you own the I/O:
   (id, signature) pairs is usually all the durability an `lsh.Index`
   needs.
 
+## Untrusted input
+
+semblance is **deterministic by design** — the same input always produces
+the same sketch, which is what makes stored signatures comparable across
+processes and releases. The flip side is that all hashing is unkeyed and
+the parameters are frozen and public, so an attacker who can choose the
+input can also predict every hash. Keep this in mind when any of these
+structures is fed attacker-controlled documents.
+
+- **Seed the collision-sensitive structures.** `lsh.Index` bucket keys
+  derive from the MinHash signature, so a **non-zero, secret seed** passed
+  to `minhash.New` randomizes them and defeats deliberate bucket flooding.
+  The frozen defaults (`Defaults()`, the top-level `Similarity`) use seed
+  0 — fine for trusted corpora, predictable for adversaries. There is no
+  such lever for `winnow.Index`, `hll`, or `topk`: they key on the raw
+  shingle/element hashes (xxhash seed 0, frozen), so an attacker can force
+  worst-case collisions regardless of any seed. Treat their memory and
+  per-query cost as attacker-influenced and bound your input sizes.
+
+- **Winnowing overlap output is capped.** `winnow.Overlaps` and
+  `Index.Matches` enumerate shared-fingerprint position pairs, which is
+  quadratic on highly repetitive text (a long run of one byte matches at
+  nearly every position). Both stop at `winnow.MaxResults`; a result at
+  the cap means "overlap is at least this large," not "exactly this."
+  `Index.Overlap` returns a bounded per-document summary and is the safer
+  default when you only need how much, not where.
+
+- **Deserialization is bounds-checked.** `DecodeSignature`,
+  `hll.UnmarshalBinary`, and `simhash.Fingerprint.UnmarshalBinary`
+  validate the version, algorithm, and length fields before allocating, so
+  a malformed or hostile blob yields an error, never an oversized
+  allocation — but they do not authenticate the bytes. A tampered
+  signature decodes to a valid-but-wrong sketch; sign or MAC stored blobs
+  if their integrity matters.
+
+- **`*Bytes` zero-copy contract.** The `*Bytes` entry points view the
+  slice without copying; mutating it before iteration completes yields
+  wrong hashes (never a memory-safety fault). Pass a stable slice.
+
 ## References
 
 - A. Z. Broder. *On the resemblance and containment of documents.*
