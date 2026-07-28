@@ -302,4 +302,8 @@ need until then.
 
 ## Deviations from spec
 
-None yet.
+Recorded inline where they happened: marshal/unmarshal moved from
+`Signature` to `MinHasher` (M4 section above — a bare `[]uint64` cannot
+self-describe), and the winnowing overlap API returns aligned spans
+rather than the point pairs originally sketched (see "Winnowing
+(post-v0)"). Everything else shipped as specified.
