@@ -469,3 +469,49 @@ merge-heavy workload ever shows up. Float estimators (`Cardinality`,
 summation, so a runtime-dispatched vector path would return different
 bits on different CPUs — the one place SIMD would break the
 determinism promise.
+
+## Round 8: vectorized shingle fold (both kernels shipped, gate at 1.4×)
+
+The Mix-chain shingle fold was ~28% of the Words pipeline and ~38% of
+SketchText after round 7. Each w=3 shingle is three serial Mix steps
+(rol31 + xor + multiply), but adjacent shingles are independent — so
+lanes are just three shifted 64-byte views of the token stream, and each
+Mix step is one native VPROLQ + VPXORQ + VPMULLQ. The first step's
+rol31(MixInit) folds into a broadcast constant computed at setup with a
+scalar ROLQ.
+
+Kernels were gated over the *batch* scalar fold (a tight loop with full
+ILP — the honest baseline, not the pipeline's per-token-arrival fold).
+The gate opened at 1.5× and was settled at **1.4×**: the AVX2 twin's
+1.46× sits between the two, and keeping it means AVX2-only machines get
+part of the fold win rather than none.
+
+| Kernel | 4096 shingles | vs scalar | gate (1.4×) |
+|---|---|---|---|
+| scalar batch fold | 4.66 µs (1.13 ns/shingle) | 1.0× | — |
+| AVX2 (synthesized mul+rot) | 3.20 µs | **1.46×** | passed |
+| AVX-512 | 1.42 µs (0.35 ns/shingle) | **3.3×** | passed |
+
+The AVX2 margin is the counterpoint to round 7's: there the scalar
+baseline paid xxhash's per-call overhead per window and AVX2 won 2.4×;
+here the baseline is nine tight ALU ops per shingle, and the ~11
+synthesized ops per Mix step leave only the 1.46× — the synthesis tax
+almost exactly cancels the lane win.
+
+Integration restructures the w=3 paths of `Words` and `WordsBlocks` from
+fold-per-token to batched: token hashes accumulate in a 258-entry buffer
+(256 shingles per drain plus the two carried window tokens), the kernel
+folds eight at a time into a shingle buffer, and the scalar fold takes
+the final non-multiple-of-8 tail. `WordsBlocks`' flush cadence is
+bit-preserved (same shingle sequence, same block boundaries — pinned by
+a dispatch test that compares cadence, not just hashes). The batching
+state lives in one struct captured by the emit closure, so the alloc
+pins hold unchanged (words 3, SketchText 1). Other w keep the ring fold;
+`WordScanner` stays scalar (streaming chunk boundaries make batching
+messy, and the fuzz-equivalence tests pin its output to WordsBlocks').
+
+End-to-end, 100 KB: minhash Words 200 → **230 MB/s (1.15×)**, SketchText
+273 → **307 MB/s (1.13×)**. Cumulative since the pre-AVX-512 baseline:
+Words 127 → 230 (1.8×), SketchText 273 stands on rounds 1–7's gains.
+The front-end remainder is now tokenizer scan/classify plus
+variable-length token hashing — the two remaining round-7 candidates.
