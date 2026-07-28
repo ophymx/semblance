@@ -86,3 +86,59 @@ elemloop:
 
 	VZEROUPPER
 	RET
+
+// func sketchBlockAVX512(dst, a, b, block []uint64)
+//
+// The AVX-512 twin of sketchBlockAVX2: eight permutations per ZMM instead
+// of four, and both synthesized operations become native — VPMULLQ is the
+// 64-bit lane multiply (AVX512DQ), VPMINUQ the unsigned 64-bit min
+// (AVX512F). No 3×vpmuludq multiply, no sign-bias min trick, no unbias at
+// the end. Two accumulators (Z2 for even elements, Z3 for odd) split the
+// min dependency chain, as in the AVX2 kernel. Requires len(dst) % 8 == 0
+// and len(block) % 2 == 0, both nonzero.
+TEXT ·sketchBlockAVX512(SB), NOSPLIT, $0-96
+	MOVQ dst_base+0(FP), DI
+	MOVQ dst_len+8(FP), DX
+	MOVQ a_base+24(FP), R8
+	MOVQ b_base+48(FP), R9
+	MOVQ block_base+72(FP), R10
+	MOVQ block_len+80(FP), CX
+	SHRQ $3, DX                  // permutation groups (8 per ZMM)
+
+permloop512:
+	VMOVDQU64 (R8), Z0           // A
+	VMOVDQU64 (R9), Z1           // B
+	VMOVDQU64 (DI), Z2           // D0
+	VMOVDQA64 Z2, Z3             // D1 = D0
+
+	MOVQ R10, SI
+	MOVQ CX, BX
+
+elemloop512:
+	// even element -> D0
+	VPBROADCASTQ (SI), Z4
+	VPMULLQ      Z4, Z0, Z4      // A*x
+	VPADDQ       Z1, Z4, Z4      // + B
+	VPMINUQ      Z4, Z2, Z2
+
+	// odd element -> D1
+	VPBROADCASTQ 8(SI), Z5
+	VPMULLQ      Z5, Z0, Z5
+	VPADDQ       Z1, Z5, Z5
+	VPMINUQ      Z5, Z3, Z3
+
+	ADDQ $16, SI
+	SUBQ $2, BX
+	JNZ  elemloop512
+
+	VPMINUQ   Z3, Z2, Z2         // min(D0, D1)
+	VMOVDQU64 Z2, (DI)
+
+	ADDQ $64, DI
+	ADDQ $64, R8
+	ADDQ $64, R9
+	DECQ DX
+	JNZ  permloop512
+
+	VZEROUPPER
+	RET

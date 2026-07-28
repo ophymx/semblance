@@ -4,3 +4,6 @@ package cpuinfo
 
 // HasAVX2 is false on non-amd64 platforms.
 const HasAVX2 = false
+
+// HasAVX512 is false on non-amd64 platforms.
+const HasAVX512 = false

@@ -344,3 +344,72 @@ was only the 2–3 indirect calls per token, worth ~15% with two extra
 layers (simhash) and ~5% with one (minhash). Reset/Update also give
 callers chunked/incremental sketching, a step toward the streaming
 use case.
+
+## Round 6: AVX-512 (the aside, cashed in)
+
+Round 4's cross-cutting note 4 predicted AVX-512 would make the MinHash
+loop native and "roughly double its ceiling." Measured on an 11th-gen
+Intel i7-11850H (Tiger Lake, AVX-512F/DQ/BW/VL + VPOPCNTDQ + GFNI), Go
+1.26, single-thread. Detection extends `internal/cpuinfo` with
+`HasAVX512` (CPUID leaf-7 AVX512F+DQ, plus the XCR0 opmask/ZMM_Hi256/
+Hi16_ZMM bits — mask 0xE6 — so the OS preserves the wide state); each
+amd64 kernel package gains a `useAVX512` var beside `useAVX2`, dispatch
+preferring the widest available path, and `TestDispatchBothPaths` /
+`TestEqCountPaths` force all three so every branch is covered on one
+machine. All kernels stay bit-identical (oracle + golden).
+
+**Kernel level (k=128, single block):**
+
+| Kernel | scalar | AVX2 | AVX-512 | 512 vs AVX2 |
+|---|---|---|---|---|
+| MinHash `sketchBlock` (256-word) | 125 MB/s | 244 MB/s | **652 MB/s** | **2.66×** |
+| Jaccard `eqCount` (k=128) | 62 ns | 19 ns | **13 ns** | **1.47×** |
+| SimHash CSA, raw kernel (248-word) | — | 78 ns | **55 ns** | 1.42× |
+| SimHash `pospopcnt`, full (252-word) | 1.08 µs | **0.84 µs** | 1.40 µs | *0.60×* |
+
+**End-to-end MinHash, 100 KB doc:**
+
+| Pipeline | scalar | AVX2 | AVX-512 | 512 vs AVX2 |
+|---|---|---|---|---|
+| Char (k-gram 8) | 14.4 MB/s | 26.0 MB/s | **58.0 MB/s** | **2.2×** |
+| Words (w=3) | 82 MB/s | 127 MB/s | **196 MB/s** | 1.55× |
+
+**Target 1 (MinHash) — the headline, over-delivered.** `sketchBlockAVX512`
+is the AVX2 kernel with the two synthesized operations replaced by native
+instructions — `VPMULLQ` (AVX512DQ) for the 64-bit lane multiply, `VPMINUQ`
+(AVX512F) for the unsigned min — so the whole apparatus goes away: no
+3×`vpmuludq` multiply, no sign-bias trick, no unbias at the end, and eight
+permutations per ZMM instead of four. Kernel **2.66× over AVX2** (5.2× over
+scalar) — better than the predicted ~2×, because AVX2 was paying for the
+synthesis, not just the narrower lanes. End-to-end the Char pipeline (which
+is ~85% permutation loop) rides most of that, **2.2×** over AVX2; Words is
+Amdahl-capped by the shared tokenizer at 1.55×, as predicted.
+
+**Target 3 (Jaccard) — clean win.** `eqCountAVX512`: `VPCMPEQQ` to an 8-bit
+mask, then a merge-masked `VPADDQ` adds one to the lane counters in exactly
+the equal lanes (no −1-mask subtraction). No reduction bottleneck, so the
+width shows through directly: **1.47× over AVX2**, 4.8× over scalar.
+
+**Target 2 (SimHash pospopcnt) — a negative result, kept.** The AVX-512 CSA
+(eight banks per ZMM) *is* faster in isolation — 55 vs 78 ns raw, **1.42×**
+— but `pospopcnt` is dominated by the scalar plane-expand (~90% of the
+call), and doubling the bank count from four to eight *doubles* the
+partial-count plane-words the expand must walk. Splitting each position's
+count across more lanes yields more total set bits in the partial
+representation (`popcount(31·d)` per lane × 8 lanes > `popcount(63·d)` × 4),
+so the wider kernel optimizes the cheap part and inflates the expensive
+one: **net 0.60× end-to-end**. Not shipped — AVX2 stays the pospopcnt
+path, with the reasoning recorded in `csaAVX2`'s comment. The real lever
+here is vectorizing the *expand* (a bit-plane→count transpose, a natural
+fit for GFNI `gf2p8affineqb`, which this CPU has), not the CSA; that is a
+separate, larger effort left as future work.
+
+**Caveats.** Numbers are single-thread; Tiger Lake is a mobile part with
+mild AVX-512 downclocking, so a Xeon/EPYC server will shift the ratios
+(usually further in AVX-512's favor for the multiply-bound MinHash kernel,
+and the pospopcnt verdict may differ where the 512-bit ALU ports are
+wider). Round 3's saturation lesson still applies: size fleets from
+saturated numbers, not these. The standing conclusions hold — width pays
+where 64-bit arithmetic is unavoidable and dominant (MinHash multiply,
+equality count), and reformulating the scalar bottleneck beats widening the
+vector when the bottleneck is elsewhere (pospopcnt expand).

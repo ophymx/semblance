@@ -5,6 +5,13 @@ package cpuinfo
 // Detected once at startup.
 var HasAVX2 = detectAVX2()
 
+// HasAVX512 reports whether both the CPU and the operating system support
+// the AVX-512 subset the kernels use: AVX512F (foundation: ZMM, masks,
+// vpminuq, vpaddq) and AVX512DQ (vpmullq, the native 64-bit lane multiply).
+// The OS must save/restore the extended state — opmask, ZMM_Hi256, and
+// Hi16_ZMM — checked via XGETBV. Detected once at startup.
+var HasAVX512 = detectAVX512()
+
 func detectAVX2() bool {
 	maxID, _, _, _ := cpuid(0, 0)
 	if maxID < 7 {
@@ -24,6 +31,30 @@ func detectAVX2() bool {
 	}
 	_, ebx7, _, _ := cpuid(7, 0)
 	return ebx7&(1<<5) != 0 // AVX2
+}
+
+func detectAVX512() bool {
+	maxID, _, _, _ := cpuid(0, 0)
+	if maxID < 7 {
+		return false
+	}
+	_, _, ecx1, _ := cpuid(1, 0)
+	const osxsave = 1 << 27
+	if ecx1&osxsave == 0 {
+		return false
+	}
+	// XCR0 must have the AVX bits (1,2) plus the AVX-512 bits: 5 (opmask),
+	// 6 (ZMM_Hi256), and 7 (Hi16_ZMM) — mask 0xE6 — so the OS preserves the
+	// full ZMM/mask state across context switches.
+	if eax, _ := xgetbv(); eax&0xe6 != 0xe6 {
+		return false
+	}
+	_, ebx7, _, _ := cpuid(7, 0)
+	const (
+		avx512f  = 1 << 16
+		avx512dq = 1 << 17
+	)
+	return ebx7&avx512f != 0 && ebx7&avx512dq != 0
 }
 
 func cpuid(eaxIn, ecxIn uint32) (eax, ebx, ecx, edx uint32)
