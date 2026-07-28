@@ -515,3 +515,43 @@ End-to-end, 100 KB: minhash Words 200 → **230 MB/s (1.15×)**, SketchText
 Words 127 → 230 (1.8×), SketchText 273 stands on rounds 1–7's gains.
 The front-end remainder is now tokenizer scan/classify plus
 variable-length token hashing — the two remaining round-7 candidates.
+
+## Round 9: tokenizer classify (gate failed, not shipped)
+
+The original target-4 prediction (2–4× from simdjson-style
+classification) finally got its measurement — and failed the 1.4× gate.
+
+The prototype was structurally sound: an AVX-512BW kernel classifying 64
+bytes per op into two masks (definite ASCII boundaries; [a-z0-9] bytes)
+via seven `VPCMPUB` range compares and mask-register logic, and a
+mask-walk tokenizer exploiting the invariant that a token can never
+contain an ASCII-boundary byte — maximal non-boundary spans are
+independent segments, a pure-[a-z0-9] span is exactly one zero-copy
+token, and impure spans fall to the scalar tokenizer over just that
+span. Verified bit-identical against the scalar tokenizer by an
+every-byte-value mask oracle plus 15 s of fuzz (830 k execs) over
+corpora hitting chunk borders, long tokens, Unicode separators, and
+open tails.
+
+Measured at the tokenizer level (`tokenHashes` standalone, emit-only):
+
+| Corpus | scalar | mask-driven | speedup |
+|---|---|---|---|
+| lowercase (the common case) | 15.4 µs | 12.6 µs | **1.2–1.25×** |
+| mixed case/Unicode | 146 µs | 149 µs | **~1.0×** |
+
+Under the gate on the favorable corpus, parity on the unfavorable one —
+dropped. Two causes, both structural: (1) round 2's scalar tokenizer
+rewrite already removed the per-byte classification burden for the
+common case (zero-copy lowercase runs), so the 2–4× prediction was
+priced against a baseline that no longer exists; (2) what remains of
+`tokenHashes` is dominated by `xxhash.Sum64String` per ~6-byte token,
+which classification cannot touch. The mask walk saves the scan but
+pays span bookkeeping, netting ~20%.
+
+The tokenizer lesson now has both halves: the scalar rewrite (round 2)
+captured the win SIMD classification was predicted to deliver, and the
+vector version afterwards has nothing left to accelerate. The
+remaining front-end lever is lane-parallel hashing of the *tokens*
+(variable length — the hard variant of round 7's fixed-width windows);
+classification is exhausted.
