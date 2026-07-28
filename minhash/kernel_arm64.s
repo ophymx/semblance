@@ -27,6 +27,7 @@ TEXT ·sketchBlockNEON(SB), NOSPLIT, $0-96
 	MOVD block_base+72(FP), R4
 	MOVD block_len+80(FP), R5
 	LSR  $2, R1                  // permutation groups
+	CBZ  R1, neonret             // defensive: no groups -> nothing to do
 
 permloop:
 	VLD1 (R2), [V0.D2, V1.D2]    // A0, A1
@@ -107,4 +108,5 @@ elemloop:
 	ADD  $32, R3
 	SUBS $1, R1
 	BNE  permloop
+neonret:
 	RET

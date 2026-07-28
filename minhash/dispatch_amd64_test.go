@@ -64,6 +64,27 @@ func TestDispatchBothPaths(t *testing.T) {
 	}
 }
 
+// TestKernelZeroGuards exercises the defensive zero-count guards in the
+// vector kernels: a zero-length destination (or input) must return
+// immediately instead of decrementing a zero counter into a ~2^64-iteration
+// out-of-bounds loop. The dispatch wrappers never pass zero lengths — the
+// callers guarantee k>=1 — so these call the kernels directly.
+func TestKernelZeroGuards(t *testing.T) {
+	block := []uint64{1, 2, 3, 4, 5, 6, 7, 8}
+	if cpuinfo.HasAVX2 {
+		sketchBlockAVX2(nil, nil, nil, block)
+		if got := eqCountAVX2(nil, nil); got != 0 {
+			t.Errorf("eqCountAVX2(nil, nil) = %d, want 0", got)
+		}
+	}
+	if cpuinfo.HasAVX512 {
+		sketchBlockAVX512(nil, nil, nil, block)
+		if got := eqCountAVX512(nil, nil); got != 0 {
+			t.Errorf("eqCountAVX512(nil, nil) = %d, want 0", got)
+		}
+	}
+}
+
 // BenchmarkSketchBlockKernels measures the scalar, AVX2, and AVX-512
 // permutation kernels head-to-head on one 256-word block at k=128, so the
 // per-ISA speedup is a direct read rather than an inference from the

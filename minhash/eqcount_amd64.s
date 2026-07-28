@@ -10,6 +10,8 @@ TEXT ·eqCountAVX2(SB), NOSPLIT, $0-56
 	MOVQ a_len+8(FP), CX
 	MOVQ b_base+24(FP), DI
 	SHRQ $2, CX
+	TESTQ CX, CX                 // defensive: no lanes -> count 0
+	JZ    eqavx2zero
 
 	VPXOR Y2, Y2, Y2
 
@@ -32,6 +34,10 @@ loop:
 	VZEROUPPER
 	RET
 
+eqavx2zero:
+	MOVQ $0, ret+48(FP)
+	RET
+
 // func eqCountAVX512(a, b []uint64) int
 //
 // The AVX-512 twin of eqCountAVX2: eight lanes per iteration. VPCMPEQQ
@@ -44,6 +50,8 @@ TEXT ·eqCountAVX512(SB), NOSPLIT, $0-56
 	MOVQ a_len+8(FP), CX
 	MOVQ b_base+24(FP), DI
 	SHRQ $3, CX
+	TESTQ CX, CX                 // defensive: no lanes -> count 0
+	JZ    eqavx512zero
 
 	VPXORQ       Z2, Z2, Z2      // lane counters
 	MOVQ         $1, AX
@@ -67,4 +75,8 @@ loop512:
 	VMOVQ         X2, AX
 	MOVQ          AX, ret+48(FP)
 	VZEROUPPER
+	RET
+
+eqavx512zero:
+	MOVQ $0, ret+48(FP)
 	RET

@@ -27,6 +27,20 @@ type posting struct {
 	pos int
 }
 
+// MaxResults caps the number of position pairs [Index.Matches] and
+// [Overlaps] return. Both enumerate the cross product of shared
+// fingerprint positions, which is quadratic in the worst case: two highly
+// repetitive texts (long runs of one byte or token) yield a fingerprint at
+// nearly every position with the same hash, so every query position pairs
+// with every document position. The cap bounds the work and the output at
+// a generous ceiling — far above any legitimate document pair — turning
+// the pathological case into a signal ("overlap saturated the cap") rather
+// than an out-of-memory. Results are truncated in scan order (query
+// position, then document position), so truncation is deterministic;
+// reaching the cap means the two texts overlap at least this much. Use
+// [Index.Overlap] for a bounded per-document summary instead.
+const MaxResults = 1 << 20
+
 // Match is one fingerprint shared between a query and an indexed document:
 // the same k-gram appears at QueryPos in the query and DocPos in document
 // ID. Runs of matches with a constant DocPos−QueryPos offset localize a
@@ -132,11 +146,17 @@ func (ix *Index) Overlap(text string) []Overlap {
 // as (query position, document position) pairs — the raw material for
 // localizing shared passages. Results are sorted by document id, then
 // query position, then document position. A query fingerprint appearing in
-// several documents (or several times in one) yields one Match each.
+// several documents (or several times in one) yields one Match each. At
+// most [MaxResults] pairs are returned (see there); reaching the cap means
+// the overlap is at least that large.
 func (ix *Index) Matches(text string) []Match {
 	var out []Match
+outer:
 	for fp := range Text(text, ix.k, ix.w) {
 		for _, p := range ix.postings[fp.Hash] {
+			if len(out) == MaxResults {
+				break outer
+			}
 			out = append(out, Match{ID: p.id, Hash: fp.Hash, QueryPos: fp.Pos, DocPos: p.pos})
 		}
 	}

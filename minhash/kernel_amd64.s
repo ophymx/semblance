@@ -24,6 +24,8 @@ TEXT ·sketchBlockAVX2(SB), NOSPLIT, $0-96
 	MOVQ block_base+72(FP), R10
 	MOVQ block_len+80(FP), CX
 	SHRQ $2, DX                  // permutation groups
+	TESTQ DX, DX                 // defensive: no groups -> nothing to do
+	JZ    avx2ret
 
 	MOVQ         $0x8000000000000000, AX
 	VMOVQ        AX, X12
@@ -85,6 +87,7 @@ elemloop:
 	JNZ  permloop
 
 	VZEROUPPER
+avx2ret:
 	RET
 
 // func sketchBlockAVX512(dst, a, b, block []uint64)
@@ -104,6 +107,8 @@ TEXT ·sketchBlockAVX512(SB), NOSPLIT, $0-96
 	MOVQ block_base+72(FP), R10
 	MOVQ block_len+80(FP), CX
 	SHRQ $3, DX                  // permutation groups (8 per ZMM)
+	TESTQ DX, DX                 // defensive: no groups -> nothing to do
+	JZ    avx512ret
 
 permloop512:
 	VMOVDQU64 (R8), Z0           // A
@@ -141,4 +146,5 @@ elemloop512:
 	JNZ  permloop512
 
 	VZEROUPPER
+avx512ret:
 	RET

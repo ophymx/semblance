@@ -22,7 +22,9 @@ type Shared struct {
 // against its parent, two files for plagiarism) without building an index.
 // A fingerprint occurring at several positions in either text yields one
 // Shared per (PosA, PosB) combination. Texts sharing a run of w+k-1 or more
-// bytes share at least one fingerprint. Returns nil if there are none.
+// bytes share at least one fingerprint. Returns nil if there are none. At
+// most [MaxResults] pairs are returned (see there); reaching the cap means
+// the two texts overlap at least that much.
 // Panics if k <= 0 or w <= 0.
 func Overlaps(a, b string, k, w int) []Shared {
 	return overlaps(Text(a, k, w), Text(b, k, w))
@@ -40,8 +42,12 @@ func overlaps(fa, fb iter.Seq[Fingerprint]) []Shared {
 		posA[fp.Hash] = append(posA[fp.Hash], fp.Pos)
 	}
 	var out []Shared
+outer:
 	for fp := range fb {
 		for _, pa := range posA[fp.Hash] {
+			if len(out) == MaxResults {
+				break outer
+			}
 			out = append(out, Shared{Hash: fp.Hash, PosA: pa, PosB: fp.Pos})
 		}
 	}
