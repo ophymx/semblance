@@ -263,7 +263,7 @@ document size):
 
 Throughput on the amd64 dev box (one core, k=128): char shingles k=8
 ≈ 2.8 MB/s (xxhash per window is O(n·k) by design); word shingles w=3
-≈ 12 MB/s; `SketchText` w=3 ≈ 18 MB/s. On an Apple M1 Pro: words
+≈ 12 MB/s; `SketchText` w=3 ≈ 18 MB/s. On the Apple M2 Pro: words
 ≈ 82 MB/s, `SketchText` ≈ 169 MB/s.
 
 Kernel structure (post-v0 prototype, see docs/simd-analysis.md for the

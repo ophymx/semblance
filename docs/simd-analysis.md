@@ -132,8 +132,10 @@ the two sketch types want opposite per-ISA investment.
 ## Prototype results (targets 0 and 1)
 
 Implemented post-M4. Linux box is amd64 with AVX2 (no AVX-512); arm64
-numbers from an Apple M1 Pro, full test suite
-cross-compiled and run there — golden signatures match across platforms.
+numbers from the Apple M2 Pro mac mini (mislabeled "M1 Pro" in earlier
+revisions of these notes — same machine throughout; labels corrected in
+round 10), full test suite cross-compiled and run there — golden
+signatures match across platforms.
 
 **Target 0 (batching).** `SketchInto` buffers 256 hashes and calls
 `sketchBlock`; `simhash.Sketch` buffers weight-1 features (255, the CSA
@@ -151,7 +153,7 @@ whole story: for n unit-weight features, counts[i] = 2·s[i] − n where s is
 the positional popcount, computed with a carry-save adder over 8
 bit-planes (`pospopcnt.go`). Kernel throughput on a 252-word block:
 
-| Kernel | amd64 dev box | M1 Pro |
+| Kernel | amd64 dev box | M2 Pro |
 |---|---|---|
 | naive per-bit loop (old code) | 10 MB/s | 61 MB/s |
 | scalar CSA (pure Go) | 449 MB/s (~44×) | 2379 MB/s (~39×) |
@@ -159,7 +161,7 @@ bit-planes (`pospopcnt.go`). Kernel throughput on a 252-word block:
 | NEON | — | 2751 MB/s (1.16× CSA) |
 
 End-to-end `SketchText` 100 KB: 15.3→5.6 ms (**2.7×**) on the dev box,
-0.60 ms on the M1. The headline finding: **the predicted 4–8× SIMD win was
+0.60 ms on the M2. The headline finding: **the predicted 4–8× SIMD win was
 mostly capturable in pure Go** — the CSA reformulation delivers ~40× at
 the kernel level, and the vector kernels add only 1.2–1.7× on top because
 the pipeline is now tokenizer-bound (revising the priority table: target 4
@@ -181,9 +183,9 @@ halve the compare/blend chain. Kernel: 87.8→36.9 µs per block at k=128
 34.8→19.7 ms (**1.77×**), Words 8.4→6.5 ms (1.28×, tokenizer-bound).
 
 **NEON MinHash kernel — a correction.** Round 2 initially dismissed NEON
-by comparing the M1's scalar kernel (13.4 µs/block) against this box's
+by comparing the M2's scalar kernel (13.4 µs/block) against this box's
 AVX2 (36.9 µs) — a cross-machine comparison that says nothing about NEON.
-Measured properly (same M1, NEON vs scalar): kernel 13.4→10.8 µs
+Measured properly (same M2, NEON vs scalar): kernel 13.4→10.8 µs
 (**1.24×**), end-to-end Char 6.2→5.1 ms (**1.21×**), Words 1.05→0.90 ms
 (1.17×). That lands at the top of the original "parity to 1.3×"
 prediction and is worth its ~90 lines: `sketchBlockNEON` mirrors the AVX2
@@ -198,12 +200,12 @@ baselines.**
 tokens (the common case) now hash directly from the string, zero-copy; only
 tokens with uppercase or non-ASCII runes take the fold buffer. Identical
 hashes by construction (golden + fuzz verified). `SketchText` 5.7→4.1 ms
-(**1.38×**); on the M1, 605→405 µs (**1.49×**). The CSA lesson repeated:
+(**1.38×**); on the M2, 605→405 µs (**1.49×**). The CSA lesson repeated:
 measure the scalar rewrite before reaching for vpcmpgtb.
 
 **Target 3 (Jaccard equality count, AVX2).** `eqCountAVX2`: vpcmpeqq with
 vector-accumulated mask subtraction. `Jaccard` at k=128: 282→100 ns
-(**2.8×**). M1 scalar: 53 ns (again faster than our vectorized amd64).
+(**2.8×**). M2 scalar: 53 ns (again faster than our vectorized amd64).
 
 **Cumulative on the dev box, 100 KB docs, since the pre-prototype
 baseline** (GOAMD64=v3 builds; v1 builds keep the pure-Go wins only):
@@ -222,7 +224,7 @@ beat assembly twice (CSA, tokenizer) — always prototype pure Go first;
 (3) ISA verdicts require same-machine baselines — the first "NEON not
 worth it" call compared across machines and was wrong; (4) all kernels
 remain bit-identical to scalar, enforced by oracle tests and cross-platform
-golden runs on the M1.
+golden runs on the M2.
 
 ## Round 3: multi-threaded scaling (core saturation)
 
@@ -230,8 +232,8 @@ All rounds 0–2 numbers were single-threaded. `*Parallel` benchmark
 variants (shared read-only inputs, per-goroutine outputs, `b.RunParallel`)
 measure aggregate throughput under `-cpu` saturation. Topologies: the
 amd64 dev box behaves as 4 physical cores + SMT (near-linear to `-cpu 4`,
-+10–15% more at 8); the M1 Pro is 8P+2E (near-linear to 8, ~+10% from
-E-cores).
++10–15% more at 8); the M2 Pro is 6P+4E (near-linear through the
+P-cores, E-cores adding the rest).
 
 Aggregate MB/s (kernel benches on one 256/252-word block; pipelines on
 100 KB docs):
@@ -244,12 +246,12 @@ Aggregate MB/s (kernel benches on one 256/252-word block; pipelines on
 | amd64 v3 pospopcnt scalar | 363 | 1798 (@8) | 4.9× |
 | amd64 v3 minhash Words pipeline | 21 | 78 (@8) | 3.7× |
 | amd64 SketchText pipeline (v1≈v3) | 30 | 115 (@8) | 3.9× |
-| M1 sketchBlock NEON | 190 | 1288 (@10) | 6.8× |
-| M1 sketchBlock scalar | 154 | 1114 (@10) | 7.2× |
-| M1 pospopcnt NEON | 3119 | 22165 (@10) | 7.1× |
-| M1 pospopcnt scalar | 2288 | 17238 (@10) | 7.5× |
-| M1 minhash Words pipeline | 114 | 782 (@10) | 6.8× |
-| M1 SketchText pipeline | 249 | 1797 (@10) | 7.2× |
+| M2 sketchBlock NEON | 190 | 1288 (@10) | 6.8× |
+| M2 sketchBlock scalar | 154 | 1114 (@10) | 7.2× |
+| M2 pospopcnt NEON | 3119 | 22165 (@10) | 7.1× |
+| M2 pospopcnt scalar | 2288 | 17238 (@10) | 7.5× |
+| M2 minhash Words pipeline | 114 | 782 (@10) | 6.8× |
+| M2 SketchText pipeline | 249 | 1797 (@10) | 7.2× |
 
 Findings:
 
@@ -257,15 +259,15 @@ Findings:
    On the amd64 box, sibling hyperthreads share vector ports, so scalar
    gains more from SMT than vector code: the AVX2 pospopcnt edge falls
    from 2.3× (single) to 1.5× (saturated); sketchBlock from 1.7× to 1.5×.
-   On the M1 (no SMT) the NEON edge only drifts: 1.24×→1.16× sketchBlock,
+   On the M2 (no SMT) the NEON edge only drifts: 1.24×→1.16× sketchBlock,
    1.36×→1.29× pospopcnt.
 2. **Nothing became memory-bandwidth-bound.** Kernels are L1-resident and
    pipeline inputs are shared read-only; scaling is limited by physical
    core count (and power), not DRAM. Verdicts from single-threaded
    benchmarks stand — SIMD never inverts to a loss under load here.
-3. **The M1 scales almost ideally** (~7× on 8 P-cores, E-cores adding
-   ~10%): aggregate SimHash sketching hits 1.8 GB/s, the full MinHash
-   words pipeline 780 MB/s.
+3. **The M2 scales almost ideally** (~7× aggregate across 6P+4E — the
+   E-cores contribute real throughput): aggregate SimHash sketching hits
+   1.8 GB/s, the full MinHash words pipeline 780 MB/s.
 4. Caveat: with every core busy, per-core dynamic clocks drop on both
    machines; single-thread × core-count over-predicts by ~10–20%. Size
    fleets from the saturated numbers, not the single-thread ones.
@@ -334,7 +336,7 @@ flush callback per block instead of per-shingle yields) feeding new public
 identical.
 
 Result — smaller than the profile suggested: SketchText **1.15×** on both
-amd64 and the M1 (the 45% flat entry was mostly *real fold work* that
+amd64 and the M2 (the 45% flat entry was mostly *real fold work* that
 fusion keeps, not call overhead), Sketcher minhash path ~1.05×. The
 solid win is allocations: SketchText 4→1, Sketcher.SketchInto 3→1 per
 document (the block lives inside the fused scan; only one closure
@@ -559,3 +561,44 @@ vector version afterwards has nothing left to accelerate. The
 remaining front-end lever is lane-parallel hashing of the *tokens*
 (variable length — the hard variant of round 7's fixed-width windows);
 classification is exhausted.
+
+## Round 10: arm64 catch-up (NEON eqCount + portable batch fold)
+
+Rounds 6–9 were amd64-only; a fresh baseline on the arm64 reference
+machine measured them, correctly, as a no-op there, and profiling found
+the two catch-up levers. Both shipped; all numbers below are
+same-machine M2 Pro deltas. (Also corrected in this round: the arm64
+box was mislabeled "M1 Pro" in rounds 2–3 — it is and was the M2 Pro
+mac mini, so the older arm64 rows are same-machine, just older commits
+and toolchains. Full current tables in `benchmarks-m2pro.md`.)
+
+**NEON eqCount — round 1's "easy, situational" kernel, finally built.**
+Four lanes per iteration: VCMEQ produces −1 in equal lanes, vector adds
+accumulate the masks, one fold-and-negate at the end. No multiplies —
+the one MinHash-adjacent loop that plays entirely to NEON's strengths.
+Kernel **2.49×** over scalar (48.7 → 19.5 ns at k=128), `Jaccard`
+**2.6×** end-to-end (52.9 → 20.4 ns), `JaccardMany` 2.4× — the verify
+loop of every dedup pass, well over the 1.4× gate. Same defensive
+zero-count guard as the other kernels (CBZ before the loop).
+
+**Portable batch fold — round 8's restructure, un-gated from amd64.**
+The w=3 batching (258-token buffer, 256-shingle drains) lived behind
+`useAVX2 || useAVX512`, so non-amd64 still ran the per-token ring fold.
+The batching state and drain logic are now portable (`foldhash.go`) with
+a per-arch `foldVector` hook: amd64 keeps its kernels, everything else
+drains through the batch scalar fold — a tight sequential loop with full
+ILP instead of modular window indexing per token arrival. On the M2:
+SketchText 100 KB **+12.6%** (295.7 → 332.9 MB/s), Words +4.8%, and the
+w=3 path drops its last allocation (the ring window). Smaller than the
+fold's 28% profile share suggested — the Mix arithmetic itself is
+irreducible; batching only removes the bookkeeping around it.
+
+Two honest footnotes. Char moved ±3.6% between builds on the M2;
+interleaved A/B runs show both binaries sampling the same bimodal
+~5.13–5.32 ms band (code placement, not semantics — `sketchBlock` is
+flat at ±0.1%), so fixed-work deltas under ~4% between builds on this
+box are noise. And the M2's scalar front-end plus the batch fold now
+puts arm64 SketchText (332.9 MB/s) ahead of Tiger Lake's AVX-512
+pipeline (308) — the remaining arm64 gap is Char's permutation loop,
+capped by NEON's missing 64-bit lane multiply, which SVE2 would lift on
+future silicon but nothing will on this generation.

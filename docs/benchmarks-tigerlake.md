@@ -1,7 +1,8 @@
 # Benchmarks: Tiger Lake (i7-11850H, AVX-512)
 
 Third reference machine, to compare against the AVX2-only dev box and the
-M1 Pro in `simd-analysis.md` (rounds 2–3). This is the first machine with
+M2 Pro in `simd-analysis.md` (rounds 2–3; mislabeled "M1 Pro" there
+before round 10). This is the first machine with
 AVX-512, so it exercises the round-6/7/8 kernels (`sketchBlockAVX512`,
 `eqCountAVX512`, `charHash8AVX512`, `foldShingles3AVX512`) that the other
 two cannot.
@@ -132,8 +133,9 @@ and per-query allocation pressure GC.
 ## Cross-machine comparison
 
 The AVX2-only dev box's post-round-8 numbers live in
-`benchmarks-cometlake.md` (its earlier snapshots, and the M1 Pro's, in
-`simd-analysis.md` rounds 2–3). Two things to carry over when comparing:
+`benchmarks-cometlake.md` (its earlier snapshots, and the M2 Pro's, in
+`simd-analysis.md` rounds 2–3); the M2 Pro's current tables are in
+`benchmarks-m2pro.md`. Two things to carry over when comparing:
 
 - **This is the only AVX-512 machine**, so the round-6/7/8 kernels
   (`sketchBlock`/`eqCount`/`charHash8`/`foldShingles3` AVX-512) have no
