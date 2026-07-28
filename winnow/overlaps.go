@@ -11,9 +11,9 @@ import (
 // values with a constant PosB-PosA offset localizes a contiguous shared
 // passage in both.
 type Shared struct {
-	Hash uint64
-	PosA int
-	PosB int
+	Hash uint64 // the shared fingerprint hash
+	PosA int    // byte offset of the k-gram in the first text
+	PosB int    // byte offset of the k-gram in the second text
 }
 
 // Overlaps returns the winnowing fingerprints two texts share, as

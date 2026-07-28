@@ -26,8 +26,8 @@ import "slices"
 // Entry is a reported item: its true count lies in [Count-Err, Count].
 type Entry[T comparable] struct {
 	Item  T
-	Count uint64
-	Err   uint64
+	Count uint64 // estimated count, an upper bound on the true count
+	Err   uint64 // maximum overestimate: true count >= Count-Err
 }
 
 // Sketch is a SpaceSaving summary with a fixed number of counters. The

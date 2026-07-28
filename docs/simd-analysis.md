@@ -132,7 +132,7 @@ the two sketch types want opposite per-ISA investment.
 ## Prototype results (targets 0 and 1)
 
 Implemented post-M4. Linux box is amd64 with AVX2 (no AVX-512); arm64
-numbers from an Apple M1 Pro (`jeffreys-mac-mini`), full test suite
+numbers from an Apple M1 Pro, full test suite
 cross-compiled and run there — golden signatures match across platforms.
 
 **Target 0 (batching).** `SketchInto` buffers 256 hashes and calls

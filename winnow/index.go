@@ -32,17 +32,17 @@ type posting struct {
 // ID. Runs of matches with a constant DocPos−QueryPos offset localize a
 // contiguous shared passage.
 type Match struct {
-	ID       string
-	Hash     uint64
-	QueryPos int
-	DocPos   int
+	ID       string // id of the indexed document
+	Hash     uint64 // the shared fingerprint hash
+	QueryPos int    // byte offset of the k-gram in the query
+	DocPos   int    // byte offset of the k-gram in document ID
 }
 
 // Overlap summarizes how much a query shares with one document: Shared is
 // the number of distinct fingerprints they have in common.
 type Overlap struct {
-	ID     string
-	Shared int
+	ID     string // id of the indexed document
+	Shared int    // number of distinct fingerprints shared with the query
 }
 
 // NewIndex returns an empty index over byte k-grams with winnowing window

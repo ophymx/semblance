@@ -187,7 +187,7 @@ and lower bounds at the cost of looser Err after merging.
 
 **VerifiedIndex (post-v0).** `Index.Query` returns unverified candidate
 ids, which the dedup/near-dup workflow must then verify against stored
-signatures — and the semblance-bleve example showed every caller writes
+signatures — and an early downstream integration showed every caller writes
 the same parallel `map[string]Signature` + `JaccardMany` + index-remap
 boilerplate. `VerifiedIndex` owns the signature store (k*8 bytes/doc) and
 `Query(sig, minJaccard)` returns ranked `[]Neighbor{ID, Similarity}`
@@ -200,7 +200,7 @@ old bucket entries first (recompute-from-old-sig) so no stale entries
 survive. Equivalence with Index proven: `Query(sig, 0)` returns exactly
 `Index.Query`'s candidate set, scored.
 
-**Params helper (post-v0).** The semblance-bleve example also exposed a
+**Params helper (post-v0).** The same integration also exposed a
 quiet correctness trap: the LSH banding threshold and the similarity cutoff
 you verify at are coupled in meaning but decoupled in API — verifying below
 `Threshold()` silently loses recall (the banding never surfaces those

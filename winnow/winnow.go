@@ -31,8 +31,8 @@ import (
 // byte offset of the k-gram for [Text]/[TextBytes], or the sequence index
 // for [Hashes].
 type Fingerprint struct {
-	Pos  int
-	Hash uint64
+	Pos  int    // byte offset ([Text]) or sequence index ([Hashes]) of the selected shingle
+	Hash uint64 // the selected shingle hash
 }
 
 // Text returns an iterator over the winnowing fingerprints of text using

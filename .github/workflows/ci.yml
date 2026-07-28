@@ -7,7 +7,12 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # macos-latest is arm64: exercises the NEON kernels that
+        # ubuntu-latest (amd64, AVX2) cannot reach.
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v6

@@ -6,6 +6,7 @@ import (
 	"github.com/ophymx/semblance/lsh"
 	"github.com/ophymx/semblance/minhash"
 	"github.com/ophymx/semblance/shingle"
+	"github.com/ophymx/semblance/simhash"
 )
 
 // ExampleBandKeys builds an LSH index over external storage — the
@@ -103,6 +104,52 @@ func ExampleForest() {
 	// Output:
 	// near: 0.90
 	// mid: 0.18
+}
+
+// An Index returns unverified candidate ids — the leanest choice when
+// signatures live elsewhere. Verify candidates (here with
+// minhash.Jaccard) before treating them as matches.
+func ExampleIndex() {
+	m := minhash.New(128, 0)
+	sk := func(text string) minhash.Signature { return m.Sketch(shingle.Words(text, 3)) }
+
+	orig := sk("the city council approved the marina expansion project last night")
+	ix := lsh.NewIndex(16, 8)
+	ix.Add("orig", orig)
+	ix.Add("unrelated", sk("local gardeners share tips for pruning roses before the winter frost"))
+
+	q := sk("UPDATE: the city council approved the marina expansion project last night")
+	for _, id := range ix.Query(q) { // candidates only
+		fmt.Printf("%s: %.2f\n", id, minhash.Jaccard(q, orig))
+	}
+	// Output:
+	// orig: 0.91
+}
+
+// A HammingIndex retrieves SimHash fingerprints within a fixed Hamming
+// distance — and unlike Index, its results are exact matches, already
+// verified against the stored fingerprints. SimHash distance tracks
+// cosine similarity of the whole feature set, so it shines on documents
+// long enough that a small edit is a small fraction of the features.
+func ExampleHammingIndex() {
+	article := `the city council voted last night to approve the marina
+expansion project after months of public hearings and environmental review
+the plan adds forty new berths a public boardwalk and a small dry dock
+funding comes from a bond measure passed in the spring construction is
+expected to begin in october and finish within two years opponents cited
+noise and traffic concerns but the final tally was seven to two in favor
+of the proposal`
+
+	ix := lsh.NewHammingIndex(3)
+	ix.Add("article", simhash.SketchText(article, 3))
+	ix.Add("unrelated", simhash.SketchText(`our gardening column returns
+this week with practical advice on pruning roses mulching beds before the
+first frost and choosing bulbs for early spring color`, 3))
+
+	forwarded := simhash.SketchText("FWD: "+article, 3)
+	fmt.Println(ix.Query(forwarded))
+	// Output:
+	// [article]
 }
 
 // A VerifiedIndex answers "which indexed documents are near-duplicates of

@@ -27,11 +27,9 @@ type VerifiedIndex struct {
 }
 
 // Neighbor is a verified match returned by [VerifiedIndex.Query].
-// Similarity is the estimated Jaccard similarity to the query signature
-// (see [minhash.Jaccard] for the error bound).
 type Neighbor struct {
-	ID         string
-	Similarity float64
+	ID         string  // the id the match was added under
+	Similarity float64 // estimated Jaccard similarity to the query signature (see [minhash.Jaccard] for the error bound)
 }
 
 // NewVerifiedIndex returns an empty index for signatures of length
