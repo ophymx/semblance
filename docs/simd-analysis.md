@@ -350,7 +350,8 @@ use case.
 Round 4's cross-cutting note 4 predicted AVX-512 would make the MinHash
 loop native and "roughly double its ceiling." Measured on an 11th-gen
 Intel i7-11850H (Tiger Lake, AVX-512F/DQ/BW/VL + VPOPCNTDQ + GFNI), Go
-1.26, single-thread. Detection extends `internal/cpuinfo` with
+1.26, single-thread. Full single-thread + saturated tables for this
+machine, including cross-machine notes, are in `benchmarks-tigerlake.md`. Detection extends `internal/cpuinfo` with
 `HasAVX512` (CPUID leaf-7 AVX512F+DQ, plus the XCR0 opmask/ZMM_Hi256/
 Hi16_ZMM bits — mask 0xE6 — so the OS preserves the wide state); each
 amd64 kernel package gains a `useAVX512` var beside `useAVX2`, dispatch
