@@ -43,24 +43,12 @@ func TestFoldShingles3Kernels(t *testing.T) {
 	}
 }
 
-// genWordsText builds a deterministic multi-token document with roughly
-// nTok tokens, including some uppercase and multi-byte tokens so the
-// tokenizer's slow paths are exercised too.
-func genWordsText(nTok int, seed uint64) string {
-	vocab := []string{"alpha", "beta", "Gamma", "δέλτα", "x1", "longertoken", "q"}
-	rng := hashutil.SplitMix64(seed)
-	var out []byte
-	for range nTok {
-		out = append(out, vocab[rng.Next()%uint64(len(vocab))]...)
-		out = append(out, ' ')
-	}
-	return string(out)
-}
-
 // TestWords3DispatchBothPaths pins that Words(w=3) and WordsBlocks(w=3)
 // produce identical output — including WordsBlocks' flush cadence — with
-// each dispatch path forced in turn (scalar, AVX2, AVX-512), across token
-// counts spanning the drain boundary, plus early-stop behavior on each.
+// each dispatch path forced in turn (batch scalar, AVX2, AVX-512), across
+// token counts spanning the drain boundary, plus early-stop behavior on
+// each. (The batch-scalar-vs-ring-fold equivalence is pinned separately,
+// portably, in TestWords3BatchMatchesRingFold.)
 func TestWords3DispatchBothPaths(t *testing.T) {
 	origAVX2, origAVX512 := useAVX2, useAVX512
 	defer func() { useAVX2, useAVX512 = origAVX2, origAVX512 }()

@@ -130,9 +130,11 @@ func Words(text string, w int) iter.Seq[uint64] {
 		panic("shingle: w must be positive")
 	}
 	return func(yield func(uint64) bool) {
-		if w == 3 && words3Seq(text, yield) {
-			// Vector fast path for the default width; hashes are
+		if w == 3 {
+			// Batched fast path for the default width (vector kernels on
+			// amd64, batch scalar fold elsewhere); hashes are
 			// bit-identical to the fold below.
+			words3Seq(text, yield)
 			return
 		}
 		window := make([]uint64, w) // ring buffer of token hashes
@@ -174,9 +176,10 @@ func WordsBlocks(text string, w int, block []uint64, flush func(hashes []uint64)
 	if len(block) == 0 {
 		panic("shingle: block must not be empty")
 	}
-	if w == 3 && words3Blocks(text, block, flush) {
-		// Vector fast path for the default width; the shingle sequence
+	if w == 3 {
+		// Batched fast path for the default width; the shingle sequence
 		// and flush cadence are identical to the fold below.
+		words3Blocks(text, block, flush)
 		return
 	}
 	window := make([]uint64, w) // ring buffer of token hashes
