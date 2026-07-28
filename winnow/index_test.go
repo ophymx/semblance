@@ -82,24 +82,27 @@ func TestMatchesLocalize(t *testing.T) {
 	if len(matches) == 0 {
 		t.Fatal("no matches for a shared passage")
 	}
-	// Every match must point at byte ranges whose k-grams are equal, and
-	// the offset (DocPos - QueryPos) must be constant across the passage.
-	off := matches[0].DocPos - matches[0].QueryPos
+	// The single shared passage collapses to one aligned span.
+	if len(matches) != 1 {
+		t.Errorf("shared passage produced %d matches, want 1", len(matches))
+	}
 	for _, m := range matches {
 		if m.ID != "doc" {
 			t.Errorf("unexpected id %q", m.ID)
 		}
+		// Bounding k-grams of the span are byte-equal at constant offset.
 		if doc[m.DocPos:m.DocPos+idxK] != query[m.QueryPos:m.QueryPos+idxK] {
-			t.Errorf("match at q=%d d=%d points at unequal k-grams", m.QueryPos, m.DocPos)
+			t.Errorf("span q=%d d=%d: start k-grams unequal", m.QueryPos, m.DocPos)
 		}
-		if m.DocPos-m.QueryPos != off {
-			t.Errorf("inconsistent diagonal: got offset %d, want %d", m.DocPos-m.QueryPos, off)
+		de, qe := m.DocPos+m.Len-idxK, m.QueryPos+m.Len-idxK
+		if doc[de:de+idxK] != query[qe:qe+idxK] {
+			t.Errorf("span q=%d d=%d len=%d: end k-grams unequal", m.QueryPos, m.DocPos, m.Len)
 		}
 	}
 	// The matched span in doc should recover (approximately) the passage.
-	lo, hi := matches[0].DocPos, matches[len(matches)-1].DocPos+idxK
-	if !strings.Contains(doc[lo:hi], "marina expansion vote") {
-		t.Errorf("localized span %q does not contain the passage core", doc[lo:hi])
+	m := matches[0]
+	if !strings.Contains(doc[m.DocPos:m.DocPos+m.Len], "marina expansion vote") {
+		t.Errorf("localized span %q does not contain the passage core", doc[m.DocPos:m.DocPos+m.Len])
 	}
 }
 

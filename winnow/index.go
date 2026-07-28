@@ -27,29 +27,27 @@ type posting struct {
 	pos int
 }
 
-// MaxResults caps the number of position pairs [Index.Matches] and
-// [Overlaps] return. Both enumerate the cross product of shared
-// fingerprint positions, which is quadratic in the worst case: two highly
-// repetitive texts (long runs of one byte or token) yield a fingerprint at
-// nearly every position with the same hash, so every query position pairs
-// with every document position. The cap bounds the work and the output at
-// a generous ceiling — far above any legitimate document pair — turning
-// the pathological case into a signal ("overlap saturated the cap") rather
-// than an out-of-memory. Results are truncated in scan order (query
-// position, then document position), so truncation is deterministic;
-// reaching the cap means the two texts overlap at least this much. Use
+// MaxResults caps the fingerprint matches [Index.Matches] and [Overlaps]
+// examine while grouping shared fingerprints into [Span]s. Two highly
+// repetitive texts (long runs of one byte or token) match at nearly every
+// position with the same hash, so the raw match set is quadratic; the cap
+// bounds that work — and therefore the number of spans — at a generous
+// ceiling far above any legitimate document pair. Matches are consumed in
+// scan order (query position first), so truncation is deterministic;
+// reaching the cap means the texts overlap at least this much. Use
 // [Index.Overlap] for a bounded per-document summary instead.
 const MaxResults = 1 << 20
 
-// Match is one fingerprint shared between a query and an indexed document:
-// the same k-gram appears at QueryPos in the query and DocPos in document
-// ID. Runs of matches with a constant DocPos−QueryPos offset localize a
-// contiguous shared passage.
+// Match is one aligned passage a query shares with an indexed document: the
+// query bytes [QueryPos, QueryPos+Len) align with document ID's bytes
+// [DocPos, DocPos+Len) at a constant offset. Like [Span], it collapses a
+// diagonal of matching fingerprints into one region and is a heuristic
+// locator, not a proof of byte equality (see [Span]).
 type Match struct {
 	ID       string // id of the indexed document
-	Hash     uint64 // the shared fingerprint hash
-	QueryPos int    // byte offset of the k-gram in the query
-	DocPos   int    // byte offset of the k-gram in document ID
+	QueryPos int    // byte offset of the shared region in the query
+	DocPos   int    // byte offset of the shared region in document ID
+	Len      int    // byte length of the shared region
 }
 
 // Overlap summarizes how much a query shares with one document: Shared is
@@ -142,23 +140,49 @@ func (ix *Index) Overlap(text string) []Overlap {
 	return out
 }
 
-// Matches returns every fingerprint text shares with an indexed document,
-// as (query position, document position) pairs — the raw material for
-// localizing shared passages. Results are sorted by document id, then
-// query position, then document position. A query fingerprint appearing in
-// several documents (or several times in one) yields one Match each. At
-// most [MaxResults] pairs are returned (see there); reaching the cap means
-// the overlap is at least that large.
+// Matches returns the aligned passages text shares with each indexed
+// document, as [Match] spans — the raw material for localizing shared
+// passages. Consecutive query fingerprints matching the same document at a
+// constant offset collapse into one Match, so a borrowed paragraph is one
+// span per document, not one entry per fingerprint. Results are sorted by
+// document id, then query position, then document position. At most
+// [MaxResults] matches are examined (see there); reaching the cap means the
+// overlap is at least that large.
 func (ix *Index) Matches(text string) []Match {
+	type key struct {
+		id  string
+		off int
+	}
+	type run struct{ qStart, dStart, qEnd, lastJ int }
+	active := make(map[key]*run)
 	var out []Match
-outer:
+	emit := func(k key, r *run) {
+		out = append(out, Match{ID: k.id, QueryPos: r.qStart, DocPos: r.dStart, Len: r.qEnd + ix.k - r.qStart})
+	}
+
+	budget := MaxResults
+	j := 0
+loop:
 	for fp := range Text(text, ix.k, ix.w) {
 		for _, p := range ix.postings[fp.Hash] {
-			if len(out) == MaxResults {
-				break outer
+			if budget <= 0 {
+				break loop
 			}
-			out = append(out, Match{ID: p.id, Hash: fp.Hash, QueryPos: fp.Pos, DocPos: p.pos})
+			budget--
+			k := key{p.id, p.pos - fp.Pos}
+			if r, ok := active[k]; ok && r.lastJ == j-1 {
+				r.qEnd, r.lastJ = fp.Pos, j // extend the open run
+			} else {
+				if ok {
+					emit(k, r) // the run on this diagonal ended earlier
+				}
+				active[k] = &run{qStart: fp.Pos, dStart: p.pos, qEnd: fp.Pos, lastJ: j}
+			}
 		}
+		j++
+	}
+	for k, r := range active {
+		emit(k, r)
 	}
 	slices.SortFunc(out, func(a, b Match) int {
 		if a.ID != b.ID {

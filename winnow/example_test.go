@@ -50,10 +50,10 @@ func ExampleIndex() {
 	top := ix.Overlap(suspect)[0]
 	fmt.Printf("overlaps %q on %d fingerprints\n", top.ID, top.Shared)
 
-	// Localize the borrowed span within the suspect via the match run.
-	m := ix.Matches(suspect)
-	lo, hi := m[0].QueryPos, m[len(m)-1].QueryPos+k
-	fmt.Printf("borrowed: %q\n", suspect[lo:hi])
+	// Localize the borrowed span within the suspect: Matches returns it as
+	// one aligned region, ready to slice.
+	m := ix.Matches(suspect)[0]
+	fmt.Printf("borrowed: %q\n", suspect[m.QueryPos:m.QueryPos+m.Len])
 	// Output:
 	// overlaps "wire-story" on 14 fingerprints
 	// borrowed: " approves the marina expansion project after a seven to two vo"
@@ -65,13 +65,9 @@ func ExampleOverlaps() {
 	a := "the quarterly report shows that revenue climbed twelve percent across every region"
 	b := "as we noted last week, revenue climbed twelve percent across every region this year"
 
-	shared := winnow.Overlaps(a, b, 8, 6)
-	lo, hi := shared[0].PosB, shared[0].PosB+8
-	for _, s := range shared {
-		lo = min(lo, s.PosB)
-		hi = max(hi, s.PosB+8)
-	}
-	fmt.Printf("%q\n", b[lo:hi])
+	// The shared passage comes back as one aligned span; slice it directly.
+	s := winnow.Overlaps(a, b, 8, 6)[0]
+	fmt.Printf("%q\n", b[s.PosB:s.PosB+s.Len])
 	// Output:
 	// "venue climbed twelve percent across every r"
 }

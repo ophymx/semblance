@@ -112,11 +112,13 @@ structures is fed attacker-controlled documents.
   worst-case collisions regardless of any seed. Treat their memory and
   per-query cost as attacker-influenced and bound your input sizes.
 
-- **Winnowing overlap output is capped.** `winnow.Overlaps` and
-  `Index.Matches` enumerate shared-fingerprint position pairs, which is
+- **Winnowing overlap work is bounded.** `winnow.Overlaps` and
+  `Index.Matches` return aligned `Span`s (diagonal runs of shared
+  fingerprints collapsed into one region), so a shared passage is one span,
+  not one entry per fingerprint. The underlying match set is still
   quadratic on highly repetitive text (a long run of one byte matches at
-  nearly every position). Both stop at `winnow.MaxResults`; a result at
-  the cap means "overlap is at least this large," not "exactly this."
+  nearly every position), so both bound the matches they examine at
+  `winnow.MaxResults`; reaching it means "overlap is at least this large."
   `Index.Overlap` returns a bounded per-document summary and is the safer
   default when you only need how much, not where.
 

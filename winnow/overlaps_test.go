@@ -14,14 +14,6 @@ const (
 	ovW = 6
 )
 
-func hashSet(text string) map[uint64]bool {
-	s := map[uint64]bool{}
-	for fp := range winnow.Text(text, ovK, ovW) {
-		s[fp.Hash] = true
-	}
-	return s
-}
-
 func TestOverlapsSoundAndComplete(t *testing.T) {
 	passage := "the marina expansion vote passed seven to two late on tuesday evening downtown here"
 	a := "padding text before the good part. " + passage + ". unique tail alpha."
@@ -32,37 +24,27 @@ func TestOverlapsSoundAndComplete(t *testing.T) {
 		t.Fatal("no overlaps for a shared passage")
 	}
 
-	// Sound: every pair points at byte-equal k-grams in both texts.
+	// Sound: each span's bounding k-grams are byte-equal in both texts, and
+	// the offset PosB-PosA is constant across the aligned region.
 	for _, s := range got {
 		if a[s.PosA:s.PosA+ovK] != b[s.PosB:s.PosB+ovK] {
-			t.Errorf("pair a=%d b=%d: %q != %q", s.PosA, s.PosB,
-				a[s.PosA:s.PosA+ovK], b[s.PosB:s.PosB+ovK])
+			t.Errorf("span a=%d b=%d: start k-grams differ: %q != %q",
+				s.PosA, s.PosB, a[s.PosA:s.PosA+ovK], b[s.PosB:s.PosB+ovK])
+		}
+		ea, eb := s.PosA+s.Len-ovK, s.PosB+s.Len-ovK
+		if a[ea:ea+ovK] != b[eb:eb+ovK] {
+			t.Errorf("span a=%d b=%d len=%d: end k-grams differ", s.PosA, s.PosB, s.Len)
 		}
 	}
 
-	// Complete: distinct shared hashes == the fingerprint-hash intersection.
-	aSet, bSet := hashSet(a), hashSet(b)
-	want := map[uint64]bool{}
-	for h := range aSet {
-		if bSet[h] {
-			want[h] = true
-		}
-	}
-	gotHashes := map[uint64]bool{}
-	for _, s := range got {
-		gotHashes[s.Hash] = true
-	}
-	if len(gotHashes) != len(want) {
-		t.Errorf("distinct shared hashes = %d, intersection = %d", len(gotHashes), len(want))
-	}
-	for h := range want {
-		if !gotHashes[h] {
-			t.Errorf("missing shared hash %#x", h)
-		}
+	// The single shared passage collapses to one span (one diagonal), not
+	// one entry per fingerprint.
+	if len(got) != 1 {
+		t.Errorf("shared passage produced %d spans, want 1", len(got))
 	}
 
 	// Sorted by (PosA, PosB) and deterministic.
-	if !slices.IsSortedFunc(got, func(x, y winnow.Shared) int {
+	if !slices.IsSortedFunc(got, func(x, y winnow.Span) int {
 		if x.PosA != y.PosA {
 			return cmp.Compare(x.PosA, y.PosA)
 		}
@@ -74,14 +56,10 @@ func TestOverlapsSoundAndComplete(t *testing.T) {
 		t.Error("Overlaps not deterministic across calls")
 	}
 
-	// Localizes the passage in b.
-	lo, hi := got[0].PosB, got[0].PosB+ovK
-	for _, s := range got {
-		lo = min(lo, s.PosB)
-		hi = max(hi, s.PosB+ovK)
-	}
-	if !strings.Contains(b[lo:hi], "marina expansion vote") {
-		t.Errorf("localized span %q missing passage core", b[lo:hi])
+	// The span localizes the passage in b.
+	s := got[0]
+	if !strings.Contains(b[s.PosB:s.PosB+s.Len], "marina expansion vote") {
+		t.Errorf("localized span %q missing passage core", b[s.PosB:s.PosB+s.Len])
 	}
 }
 
@@ -91,8 +69,9 @@ func TestOverlapsRepeatedPassage(t *testing.T) {
 	b := "prefix line >> " + phrase + " << suffix line"
 
 	got := winnow.Overlaps(a, b, ovK, ovW)
-	// A fingerprint in b that occurs twice in a must appear as two pairs
-	// sharing PosB with distinct PosA.
+	// The phrase appears once in b and twice in a, so b's single occurrence
+	// aligns to both a-copies: two spans sharing the same PosB start (one
+	// diagonal each) with distinct PosA.
 	byB := map[int][]int{}
 	for _, s := range got {
 		byB[s.PosB] = append(byB[s.PosB], s.PosA)
@@ -104,7 +83,7 @@ func TestOverlapsRepeatedPassage(t *testing.T) {
 		}
 	}
 	if !twice {
-		t.Error("expected a b-fingerprint to match two positions in a (repeated passage)")
+		t.Error("expected a b-span to align to two positions in a (repeated passage)")
 	}
 }
 

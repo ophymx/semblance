@@ -279,6 +279,27 @@ tested (`TestDispatchBothPaths`), and everything is bit-identical to the
 scalar path. None of this affects frozen semantics: kernels change speed,
 never signatures.
 
+## Planned: winnow corpus coverage (deferred)
+
+`winnow.Overlaps` and `Index.Matches` return aligned `Span`s (diagonal runs
+of matching fingerprints), not raw `(posA, posB)` pairs — the shape a
+preprocessing pipeline consumes (byte ranges to slice, flag, or route). See
+the SPANS discussion; point pairs were the wrong altitude for the library's
+role (search, corpus dedup, boilerplate/signature/banner removal).
+
+The still-missing primitive for that role is **corpus coverage**: given a
+document, which of *its* byte ranges recur across the corpus (union over all
+matched docs, thresholded by "appears in ≥ N documents = boilerplate"),
+returned as mergeable `Region{Start, Len}` ranges to strip or flag. Sketch:
+
+    func (ix *Index) Cover(text string, minDocs int) []Region
+
+Deliberately deferred, not designed here — the threshold semantics
+(distinct-doc count vs. match count vs. corpus fraction) and region-merge
+rules deserve their own pass rather than being rushed alongside the spans
+change. `Index.Matches` (per-doc spans) covers the pairwise-localization
+need until then.
+
 ## Deviations from spec
 
 None yet.
