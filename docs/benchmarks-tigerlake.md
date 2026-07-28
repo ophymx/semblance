@@ -131,8 +131,9 @@ and per-query allocation pressure GC.
 
 ## Cross-machine comparison
 
-The AVX2-only dev box and M1 Pro numbers live in `simd-analysis.md`
-round 3. Two things to carry over when comparing:
+The AVX2-only dev box's post-round-8 numbers live in
+`benchmarks-cometlake.md` (its earlier snapshots, and the M1 Pro's, in
+`simd-analysis.md` rounds 2–3). Two things to carry over when comparing:
 
 - **This is the only AVX-512 machine**, so the round-6/7/8 kernels
   (`sketchBlock`/`eqCount`/`charHash8`/`foldShingles3` AVX-512) have no

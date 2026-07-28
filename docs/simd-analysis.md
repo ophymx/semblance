@@ -485,7 +485,10 @@ Kernels were gated over the *batch* scalar fold (a tight loop with full
 ILP — the honest baseline, not the pipeline's per-token-arrival fold).
 The gate opened at 1.5× and was settled at **1.4×**: the AVX2 twin's
 1.46× sits between the two, and keeping it means AVX2-only machines get
-part of the fold win rather than none.
+part of the fold win rather than none. (The AVX2-only Comet Lake dev box
+later measured the same kernel at 1.37–1.39× — under the gate in
+isolation, still net-positive end-to-end; see
+`benchmarks-cometlake.md`.)
 
 | Kernel | 4096 shingles | vs scalar | gate (1.4×) |
 |---|---|---|---|
