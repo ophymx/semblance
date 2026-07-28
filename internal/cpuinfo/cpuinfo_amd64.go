@@ -7,9 +7,11 @@ var HasAVX2 = detectAVX2()
 
 // HasAVX512 reports whether both the CPU and the operating system support
 // the AVX-512 subset the kernels use: AVX512F (foundation: ZMM, masks,
-// vpminuq, vpaddq) and AVX512DQ (vpmullq, the native 64-bit lane multiply).
-// The OS must save/restore the extended state — opmask, ZMM_Hi256, and
-// Hi16_ZMM — checked via XGETBV. Detected once at startup.
+// vpminuq, vpaddq), AVX512DQ (vpmullq, the native 64-bit lane multiply),
+// and AVX512BW (vpshufb on ZMM). Every CPU shipping F+DQ (Skylake-X
+// onward) also has BW, so requiring it excludes no real hardware. The OS
+// must save/restore the extended state — opmask, ZMM_Hi256, and Hi16_ZMM —
+// checked via XGETBV. Detected once at startup.
 var HasAVX512 = detectAVX512()
 
 func detectAVX2() bool {
@@ -53,8 +55,9 @@ func detectAVX512() bool {
 	const (
 		avx512f  = 1 << 16
 		avx512dq = 1 << 17
+		avx512bw = 1 << 30
 	)
-	return ebx7&avx512f != 0 && ebx7&avx512dq != 0
+	return ebx7&avx512f != 0 && ebx7&avx512dq != 0 && ebx7&avx512bw != 0
 }
 
 func cpuid(eaxIn, ecxIn uint32) (eax, ebx, ecx, edx uint32)

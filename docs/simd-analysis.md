@@ -413,3 +413,49 @@ saturated numbers, not these. The standing conclusions hold — width pays
 where 64-bit arithmetic is unavoidable and dominant (MinHash multiply,
 equality count), and reformulating the scalar bottleneck beats widening the
 vector when the bottleneck is elsewhere (pospopcnt expand).
+
+## Round 7: lane-parallel window hashing (a non-target, re-measured)
+
+Round 6 inverted the profiles: with the permutation kernel 5.2× faster,
+xxhash of Char's overlapping windows — dismissed in the original analysis
+at ~5% share — had grown to **22%** of the Char pipeline. The "non-target"
+verdict was economics, and the economics moved 4×. (Re-profiling after
+each kernel round, not trusting remembered shares, is what caught this.)
+
+`charHash8AVX512` hashes eight overlapping 8-byte windows per iteration:
+one `VBROADCASTI32X4` replicates 16 text bytes to all lanes, one `VPSHUFB`
+(AVX512BW, now part of the `HasAVX512` gate — every F+DQ chip has it)
+builds the eight shifted windows, and the exact xxhash 8-byte path runs in
+the 64-bit lanes — 5 `VPMULLQ`, 2 native `VPROLQ` rotates, and the
+shift/xor avalanche. This is the doc's "lane-parallel xxhash" descendant
+of the minio multi-buffer pattern, with one document supplying unlimited
+independent lanes and none of minio's synchronization. Bit-identical to
+`xxhash.Sum64` by construction (exact integer ops; oracle-tested across
+patterns, golden tests unchanged).
+
+The go/no-go gate was set at 1.5× over scalar at the kernel level;
+measured **5.4×** (4096 windows: 12.9 → 2.35 µs, 0.57 ns/window — the
+scalar loop pays xxhash's short-input path plus per-call overhead per
+window; the kernel amortizes both across lanes). `Char` dispatches to it
+for k=8 (the default char width) via a 256-hash stack buffer, scalar tail
+for the last ≤8 windows and every other k; `CharBytes` shares the path.
+Allocations unchanged (the buffer stays on the stack).
+
+End-to-end Char 100 KB: 57.4 → **66–69 MB/s (~1.15–1.2×)**, and the
+pipeline profile is now 76% permutation kernel + 15% yield/buffer loop,
+with window hashing at 4% — hashing is off the table. `winnow.Text` at
+k=8 rides the same path free; other k stay scalar (the kernel's
+window-construction trick needs the 8-window group to fit a 16-byte
+load, so generalizing to k ≤ 9 is possible but unmotivated until a
+profile says so).
+
+Remaining candidates, in profile order: the Words/SimHash front-end
+(tokenizer classify + Mix-chain shingle fold + variable-length token
+hashing, ~64% of Words), the GFNI plane-expand transpose for SimHash
+(13%, would also un-shelve round 6's AVX-512 CSA), and trivial
+`VPMINUQ`/`VPMAXUB` kernels for `minhash.Union`/`hll.Merge` if a
+merge-heavy workload ever shows up. Float estimators (`Cardinality`,
+`hll.Estimate`) are permanently out: vectorizing reorders the FP
+summation, so a runtime-dispatched vector path would return different
+bits on different CPUs — the one place SIMD would break the
+determinism promise.

@@ -57,7 +57,16 @@ func Char(text string, k int) iter.Seq[uint64] {
 		panic("shingle: k must be positive")
 	}
 	return func(yield func(uint64) bool) {
-		for i := 0; i+k <= len(text); i++ {
+		i := 0
+		if k == 8 {
+			// Vector fast path for the common window width (see
+			// charHash8Seq); hashes are bit-identical to the loop below.
+			var stop bool
+			if i, stop = charHash8Seq(text, yield); stop {
+				return
+			}
+		}
+		for ; i+k <= len(text); i++ {
 			if !yield(xxhash.Sum64String(text[i : i+k])) {
 				return
 			}
