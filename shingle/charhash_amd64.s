@@ -76,3 +76,127 @@ loop:
 
 	VZEROUPPER
 	RET
+
+// xxhash prime constants as 4-lane broadcast tables for the AVX2 kernel's
+// memory operands (EVEX embedded broadcast is AVX-512-only). The *s tables
+// hold prime>>32: VPMULUDQ reads only the low 32 bits of each lane, so
+// they supply the high halves for the synthesized 64-bit multiply.
+DATA charP1<>+0(SB)/8, $0x9E3779B185EBCA87
+DATA charP1<>+8(SB)/8, $0x9E3779B185EBCA87
+DATA charP1<>+16(SB)/8, $0x9E3779B185EBCA87
+DATA charP1<>+24(SB)/8, $0x9E3779B185EBCA87
+GLOBL charP1<>(SB), RODATA|NOPTR, $32
+DATA charP1s<>+0(SB)/8, $0x9E3779B1
+DATA charP1s<>+8(SB)/8, $0x9E3779B1
+DATA charP1s<>+16(SB)/8, $0x9E3779B1
+DATA charP1s<>+24(SB)/8, $0x9E3779B1
+GLOBL charP1s<>(SB), RODATA|NOPTR, $32
+DATA charP2<>+0(SB)/8, $0xC2B2AE3D27D4EB4F
+DATA charP2<>+8(SB)/8, $0xC2B2AE3D27D4EB4F
+DATA charP2<>+16(SB)/8, $0xC2B2AE3D27D4EB4F
+DATA charP2<>+24(SB)/8, $0xC2B2AE3D27D4EB4F
+GLOBL charP2<>(SB), RODATA|NOPTR, $32
+DATA charP2s<>+0(SB)/8, $0xC2B2AE3D
+DATA charP2s<>+8(SB)/8, $0xC2B2AE3D
+DATA charP2s<>+16(SB)/8, $0xC2B2AE3D
+DATA charP2s<>+24(SB)/8, $0xC2B2AE3D
+GLOBL charP2s<>(SB), RODATA|NOPTR, $32
+DATA charP3<>+0(SB)/8, $0x165667B19E3779F9
+DATA charP3<>+8(SB)/8, $0x165667B19E3779F9
+DATA charP3<>+16(SB)/8, $0x165667B19E3779F9
+DATA charP3<>+24(SB)/8, $0x165667B19E3779F9
+GLOBL charP3<>(SB), RODATA|NOPTR, $32
+DATA charP3s<>+0(SB)/8, $0x165667B1
+DATA charP3s<>+8(SB)/8, $0x165667B1
+DATA charP3s<>+16(SB)/8, $0x165667B1
+DATA charP3s<>+24(SB)/8, $0x165667B1
+GLOBL charP3s<>(SB), RODATA|NOPTR, $32
+DATA charP4<>+0(SB)/8, $0x85EBCA77C2B2AE63
+DATA charP4<>+8(SB)/8, $0x85EBCA77C2B2AE63
+DATA charP4<>+16(SB)/8, $0x85EBCA77C2B2AE63
+DATA charP4<>+24(SB)/8, $0x85EBCA77C2B2AE63
+GLOBL charP4<>(SB), RODATA|NOPTR, $32
+DATA charInit<>+0(SB)/8, $0x27D4EB2F165667CD
+DATA charInit<>+8(SB)/8, $0x27D4EB2F165667CD
+DATA charInit<>+16(SB)/8, $0x27D4EB2F165667CD
+DATA charInit<>+24(SB)/8, $0x27D4EB2F165667CD
+GLOBL charInit<>(SB), RODATA|NOPTR, $32
+
+// CHARMUL64 synthesizes the 64-bit lane multiply v *= prime that AVX2
+// lacks: lo(p)*lo(v) + ((hi(p)*lo(v) + lo(p)*hi(v)) << 32), with the
+// prime's halves supplied by the p/ps broadcast tables.
+#define CHARMUL64(v, p, ps, t1, t2) \
+	VPSRLQ   $32, v, t1   \
+	VPMULUDQ p, t1, t1    \
+	VPMULUDQ ps, v, t2    \
+	VPADDQ   t2, t1, t1   \
+	VPSLLQ   $32, t1, t1  \
+	VPMULUDQ p, v, v      \
+	VPADDQ   t1, v, v
+
+// CHARROL rotates each 64-bit lane left by r.
+#define CHARROL(r, v, t1) \
+	VPSLLQ $r, v, t1        \
+	VPSRLQ $(64-r), v, v    \
+	VPOR   t1, v, v
+
+// CHARXSHIFT is one avalanche step: v ^= v >> r.
+#define CHARXSHIFT(r, v, t1) \
+	VPSRLQ $r, v, t1  \
+	VPXOR  t1, v, v
+
+// func charHash8AVX2(dst []uint64, text string)
+//
+// The AVX2 twin of charHash8AVX512, same contract: dst[i] =
+// XXH64(text[i:i+8]), len(dst) % 8 == 0 and > 0, len(text) >=
+// len(dst)+8. One 16-byte broadcast feeds two YMM groups of four windows
+// (the halves of the ZMM shuffle table); the two chains interleave to
+// cover the synthesized-multiply latency. Everything AVX-512 gets for
+// free is synthesized here: the 64-bit multiply from 3 vpmuludq
+// (CHARMUL64) and the rotates from shift pairs (CHARROL).
+TEXT ·charHash8AVX2(SB), NOSPLIT, $0-40
+	MOVQ dst_base+0(FP), DI
+	MOVQ dst_len+8(FP), CX
+	MOVQ text_base+24(FP), SI
+	SHRQ $3, CX
+
+avx2loop:
+	VBROADCASTI128 (SI), Y0
+	VPSHUFB charShuf<>+0(SB), Y0, Y1  // windows 0..3
+	VPSHUFB charShuf<>+32(SB), Y0, Y2 // windows 4..7
+
+	CHARMUL64(Y1, charP2<>(SB), charP2s<>(SB), Y3, Y4) // v * prime2
+	CHARMUL64(Y2, charP2<>(SB), charP2s<>(SB), Y5, Y6)
+	CHARROL(31, Y1, Y3)
+	CHARROL(31, Y2, Y5)
+	CHARMUL64(Y1, charP1<>(SB), charP1s<>(SB), Y3, Y4) // k1 = rol31(...)*p1
+	CHARMUL64(Y2, charP1<>(SB), charP1s<>(SB), Y5, Y6)
+	VPXOR charInit<>(SB), Y1, Y1                       // h = (p5+8) ^ k1
+	VPXOR charInit<>(SB), Y2, Y2
+	CHARROL(27, Y1, Y3)
+	CHARROL(27, Y2, Y5)
+	CHARMUL64(Y1, charP1<>(SB), charP1s<>(SB), Y3, Y4)
+	CHARMUL64(Y2, charP1<>(SB), charP1s<>(SB), Y5, Y6)
+	VPADDQ charP4<>(SB), Y1, Y1                        // h = rol27(h)*p1 + p4
+	VPADDQ charP4<>(SB), Y2, Y2
+
+	CHARXSHIFT(33, Y1, Y3)                             // avalanche
+	CHARXSHIFT(33, Y2, Y5)
+	CHARMUL64(Y1, charP2<>(SB), charP2s<>(SB), Y3, Y4)
+	CHARMUL64(Y2, charP2<>(SB), charP2s<>(SB), Y5, Y6)
+	CHARXSHIFT(29, Y1, Y3)
+	CHARXSHIFT(29, Y2, Y5)
+	CHARMUL64(Y1, charP3<>(SB), charP3s<>(SB), Y3, Y4)
+	CHARMUL64(Y2, charP3<>(SB), charP3s<>(SB), Y5, Y6)
+	CHARXSHIFT(32, Y1, Y3)
+	CHARXSHIFT(32, Y2, Y5)
+
+	VMOVDQU Y1, (DI)
+	VMOVDQU Y2, 32(DI)
+	ADDQ $8, SI
+	ADDQ $64, DI
+	DECQ CX
+	JNZ  avx2loop
+
+	VZEROUPPER
+	RET

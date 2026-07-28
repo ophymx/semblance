@@ -436,10 +436,20 @@ patterns, golden tests unchanged).
 The go/no-go gate was set at 1.5× over scalar at the kernel level;
 measured **5.4×** (4096 windows: 12.9 → 2.35 µs, 0.57 ns/window — the
 scalar loop pays xxhash's short-input path plus per-call overhead per
-window; the kernel amortizes both across lanes). `Char` dispatches to it
-for k=8 (the default char width) via a 256-hash stack buffer, scalar tail
-for the last ≤8 windows and every other k; `CharBytes` shares the path.
-Allocations unchanged (the buffer stays on the stack).
+window; the kernel amortizes both across lanes). An AVX2 twin
+(`charHash8AVX2`, same contract: one `VBROADCASTI128` feeding two
+4-window YMM groups, the five multiplies synthesized from 3×`vpmuludq`
+each and the rotates from shift pairs, prime constants as broadcast-table
+memory operands) cleared the same gate at **2.4×** (5.65 µs, 1.38
+ns/window) — AVX2-only machines get roughly half the AVX-512 win rather
+than none. Full kernel ladder: scalar 300 → AVX2 725 → AVX-512
+1615 MB/s. `Char` dispatches to the widest available path for k=8 (the
+default char width) via a 256-hash stack buffer, scalar tail for the
+last ≤8 windows and every other k; `CharBytes` shares the path.
+Allocations unchanged — with one catch the alloc-pin test caught:
+selecting the kernel through an indirect func value defeated escape
+analysis and heap-allocated the buffer; the dispatch must stay a branch
+over direct calls.
 
 End-to-end Char 100 KB: 57.4 → **66–69 MB/s (~1.15–1.2×)**, and the
 pipeline profile is now 76% permutation kernel + 15% yield/buffer loop,
