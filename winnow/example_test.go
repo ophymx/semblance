@@ -59,6 +59,26 @@ func ExampleIndex() {
 	// borrowed: " approves the marina expansion project after a seven to two vo"
 }
 
+// Cover finds the corpus's boilerplate within one document: the byte
+// ranges whose fingerprints recur across at least minDocs indexed
+// documents in runs of at least minRun. Here every post carries the same
+// list-server footer, and Cover locates it for trimming.
+func ExampleIndex_Cover() {
+	const k, w = 8, 6
+	footer := "\n--\nPosted to rec.boats.paddle - archived by the list server."
+	ix := winnow.NewIndex(k, w)
+	ix.Add("post1", "Anyone tried the new kevlar hull on whitewater? Curious about durability."+footer)
+	ix.Add("post2", "Selling a two-seat canoe, barely used, pickup only near the lake."+footer)
+	ix.Add("post3", "Trip report: three days on the river with perfect weather throughout."+footer)
+
+	doc := "Anyone tried the new kevlar hull on whitewater? Curious about durability." + footer
+	for _, r := range ix.Cover(doc, 3, 5) {
+		fmt.Printf("boilerplate: %q\n", doc[r.Pos:r.Pos+r.Len])
+	}
+	// Output:
+	// boilerplate: "-\nPosted to rec.boats.paddle - archived by the list ser"
+}
+
 // Overlaps compares two known documents directly, without an index —
 // here localizing the passage a paraphrase borrowed verbatim.
 func ExampleOverlaps() {

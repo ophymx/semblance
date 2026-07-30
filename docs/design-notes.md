@@ -279,7 +279,7 @@ tested (`TestDispatchBothPaths`), and everything is bit-identical to the
 scalar path. None of this affects frozen semantics: kernels change speed,
 never signatures.
 
-## Planned: winnow corpus coverage (deferred)
+## Winnowing corpus coverage: DocFreq and Cover
 
 `winnow.Overlaps` and `Index.Matches` return aligned `Span`s (diagonal runs
 of matching fingerprints), not raw `(posA, posB)` pairs — the shape a
@@ -287,18 +287,76 @@ preprocessing pipeline consumes (byte ranges to slice, flag, or route). See
 the SPANS discussion; point pairs were the wrong altitude for the library's
 role (search, corpus dedup, boilerplate/signature/banner removal).
 
-The still-missing primitive for that role is **corpus coverage**: given a
-document, which of *its* byte ranges recur across the corpus (union over all
-matched docs, thresholded by "appears in ≥ N documents = boilerplate"),
-returned as mergeable `Region{Start, Len}` ranges to strip or flag. Sketch:
+The last missing primitive for that role was **corpus coverage**: given a
+document, which of *its* byte ranges recur across the corpus ("appears in
+≥ N documents = boilerplate"), returned as mergeable ranges to strip or
+flag. An earlier revision of this section reserved the shape
 
     func (ix *Index) Cover(text string, minDocs int) []Region
 
-Deliberately deferred, not designed here — the threshold semantics
-(distinct-doc count vs. match count vs. corpus fraction) and region-merge
-rules deserve their own pass rather than being rushed alongside the spans
-change. `Index.Matches` (per-doc spans) covers the pairwise-localization
-need until then.
+and deliberately deferred the threshold semantics (distinct-doc count vs.
+match count vs. corpus fraction) and the region-merge rules to their own
+design pass. That pass happened in July 2026, validated by a throwaway
+prototype on a synthetic ad-prelude/footer corpus (assm scratch, not
+merged), and shipped as `Index.DocFreq` plus `Index.Cover`. Decisions of
+record:
+
+- **Threshold = distinct-document count.** On the prototype corpus the
+  separation was stark — a footer k-gram at DF=5 vs. story k-grams at
+  DF=1, no murky middle for shared-verbatim text — and a count matches
+  `Overlap`'s absolute-count convention. A corpus-fraction convenience
+  (`minDocs = ceil(frac * ix.Len())`) is caller-cheap on top. `DocFreq`
+  is the exported primitive for exactly that kind of calibration.
+- **`minRun` is not optional.** Without a run-length floor, incidental
+  single shingles that recur by chance (a common phrase at DF=5, weight 1)
+  surface as spurious one-k-gram regions. Requiring ≥ minRun consecutive
+  qualifying fingerprints kills the noise; ~5 is a sensible starting
+  point. The original sketch lacked this parameter.
+- **Merge rule: consecutive qualifying fingerprints collapse into one
+  `Region`**, sorted by Pos, non-overlapping. Edge slop of ~w+k bytes is
+  inherent to winnowing, not a bug — callers hard-trimming should snap
+  the ranges out to line boundaries.
+- **Text-based, not id-based.** An id-based variant
+  (`CommonSpans(id, ...)`) was considered and would have forced either
+  storing per-document positions (~doubling retained per-doc memory) or
+  reconstructing them from postings per call. Taking the text dissolves
+  that: the caller necessarily still has it (the point is to trim it),
+  and re-fingerprinting via `Text` yields position-ordered fingerprints
+  as the same per-call work `Add`/`Overlap` already do. No new per-doc
+  index state. A useful corollary: the query text need not be indexed at
+  all; if it is, it counts toward its own DF (minDocs=3 means "me and at
+  least two others" — documented on `Cover`).
+- **Lazy DF cache.** Boilerplate hashes are precisely the ones with long
+  posting lists, so per-call DF scans would go quadratic on exactly the
+  corpus-mining workload that motivates the feature (cover all 60k docs,
+  each rescanning the footer's 60k-entry list). The index instead keeps a
+  `docFreq map[uint64]int` built lazily in one pass over postings and
+  invalidated (nilled) by `Add`/`Remove` — a whole-corpus mining pass
+  costs one build plus per-text work. Single-hash `DocFreq` counts
+  directly when the cache is absent rather than forcing a full build.
+- **Naming.** The sketch above spelled it `Region{Start, Len}`; shipped
+  as `Region{Pos, Len}` to match package precedent (`Fingerprint.Pos`,
+  `Span.PosA`/`PosB`/`Len`). `Region` also reads naturally as the return
+  of a future single-document `Matches`-style call.
+- **Not signature-affecting.** Nothing changes stored fingerprints or the
+  selection scheme — safe in a minor release.
+
+**Deliberately not shipped: a corpus-wide fragment catalog**
+(`CommonFragments(minDocs, minRun) []CommonFragment` — every recurring
+passage with its DF, run weight, and a representative location). The
+prototype showed fragment identity is fuzzy at run edges: documents that
+extend a shared footer one fingerprint earlier (e.g. across a `.\n\n`
+story→footer boundary present in only some docs) produce a different
+fingerprint set, so the catalog carries near-duplicate rows that
+hash-set dedup cannot merge; real merging wants fingerprint-set Jaccard
+clustering (i.e. a `minhash` coupling). Since per-document `Cover` — not
+the catalog — is the primitive boilerplate subtraction builds on, the
+catalog is deferred until a consumer needs the corpus-wide review view.
+If revived: it is the one call needing positions of *indexed* documents
+(no query text to re-fingerprint), which stay reconstructible without
+new storage — `hashes[id]` is already in position order (add order
+follows `Text`'s increasing-Pos iteration) and each `posting` carries
+`pos`.
 
 ## Deviations from spec
 

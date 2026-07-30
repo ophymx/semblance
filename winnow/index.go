@@ -20,6 +20,7 @@ type Index struct {
 	k, w     int
 	postings map[uint64][]posting
 	hashes   map[string][]uint64 // id → fingerprint hashes it contributed
+	docFreq  map[uint64]int      // lazy document-frequency cache; nil after Add/Remove
 }
 
 type posting struct {
@@ -91,6 +92,7 @@ func (ix *Index) add(id string, fps iter.Seq[Fingerprint]) {
 	if id == "" {
 		panic("winnow: id must not be empty")
 	}
+	ix.docFreq = nil
 	hs := ix.hashes[id]
 	for fp := range fps {
 		ix.postings[fp.Hash] = append(ix.postings[fp.Hash], posting{id: id, pos: fp.Pos})
@@ -204,6 +206,7 @@ func (ix *Index) Remove(id string) bool {
 	if !ok {
 		return false
 	}
+	ix.docFreq = nil
 	delete(ix.hashes, id)
 	seen := make(map[uint64]bool, len(hs))
 	for _, h := range hs {
